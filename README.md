@@ -91,8 +91,8 @@ All SignalREST web requests should be using HTTP POST and should carry a request
 
 SignalREST follows SignalR's conventions for resolving hubs and methods:
 
-- Hub names are not case-sensitive
-- Method names are not case-sensitive
+- Hub names are case-insensitive
+- Method names are case-insensitive
 - Method overloads are permitted, so long as they have varying [arity](https://en.wikipedia.org/wiki/Arity)
 
 ### URLs
@@ -110,14 +110,14 @@ The request body should be a JSON array containing the names of the hubs you wan
 The response body will be a JSON string containing the connection ID you will use for all subsequent requests. This connection ID is similar to a SignalR connection ID, and will be used by the server to identify your specific session. For example:
 
 ```
-"3125878E-268B-48A9-AD80-A2FA19C9F56E"
+"61267d37-7754-4471-bde2-6b295130f67f"
 ```
 
 You should disconnect when you are finished using SignalREST. If you neglect to do so, SignalREST will automatically terminate and clean up your session in accordance with the SignalR disconnect timeout setting, whatever that happens to be on the server.
 
 #### `/connections/[CONNECTION ID]/disconnect/`
 
-This request will disconnect your SignalREST connection. You should disconnect when you are finished using SignalREST. If you neglect to do so, SignalREST will automatically terminate and clean up your session in accordance with the SignalR disconnect timeout setting, whatever that happens to be on the server.
+This request will disconnect your SignalREST connection. You should disconnect when you are finished using SignalREST. If you neglect to do so, SignalREST will automatically terminate and clean up your session in accordance with the SignalR disconnect timeout setting, whatever that happens to be on the server. SignalREST makes note of the last time you made a request for a given connection in order to enforce this. Since SignalR was designed to deliver event broadcasts, you should be making requests to `/connections/[CONNECTION_ID]/events/` (see below) regularly enough to ensure your connection is not automatically disconnected.
 
 #### `/connections/[CONNECTION ID]/invoke/[HUB NAME]/[METHOD NAME]/`
 
@@ -168,3 +168,37 @@ If a the method invocation specified could not be found or failed, the return va
 - `"Hub not found"`
 - `"Hub method not found"`
 - `"[EXCEPTION TYPE NAME]: [EXCEPTION MESSAGE]"`
+
+#### `/connections/[CONNECTION ID]/events/`
+
+This request will give you all the SignalR event broadcasts that have been sent to your connection since the connection was started, or the last time you asked.
+
+The request body should be empty.
+
+An example response body will be a JSON array. The array will be empty if no events have been raised since the connection was started or the last time you asked. A request returning events looks like this:
+
+```
+[
+  {
+    "Hub": "ExampleHub",
+    "Method": "Polo",
+    "Arguments": [
+      "2017-01-09T23:12:58.7377726Z"
+    ]
+  },
+  {
+    "Hub": "ExampleHub",
+    "Method": "Polo",
+    "Arguments": [
+      "2017-01-09T23:13:01.2331962Z"
+    ]
+  },
+  {
+    "Hub": "ExampleHub",
+    "Method": "Polo",
+    "Arguments": [
+      "2017-01-09T23:13:05.2539065Z"
+    ]
+  }
+]
+```
