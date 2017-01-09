@@ -36,7 +36,8 @@ public class ExampleHub : Microsoft.AspNet.SignalR.Hub
 
 i    public void Marco()
     {
-        Clients.All.Polo(DateTime.UtcNow);
+
+Clients.All.Polo(DateTime.UtcNow);
     }
 }
 ```
@@ -45,6 +46,7 @@ Change your code to look like this:
 
 ```
 hpublic class ExampleHub : SignalRest.Hub
+
 {
     public int Add(int a, int b)
     {
@@ -86,6 +88,12 @@ SignalREST has equivalents of every part of the SignalR hub connection lifecycle
 The SignalREST base URL will always be the root of your web application, followed by the `/signalrest` path segment. So, if the default SignalR URL for your web app was `http://somecompany.com/signalr` then your SignalREST base URL will be `http://somecompany.com/signalrest`. Therefore, connecting to SignalREST in that example would involve making a request to `http://somecompany.com/signalrest/connect/`.
 
 All SignalREST web requests should be using HTTP POST and should carry a request `Content-Type` header set to `application/json`.
+
+SignalREST follows SignalR's conventions for resolving hubs and methods:
+
+- Hub names are not case-sensitive
+- Method names are not case-sensitive
+- Method overloads are permitted, so long as they have varying [arity](https://en.wikipedia.org/wiki/Arity)
 
 ### URLs
 
