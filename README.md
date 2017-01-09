@@ -34,10 +34,9 @@ public class ExampleHub : Microsoft.AspNet.SignalR.Hub
         return a + b;
     }
 
-i    public void Marco()
+    public void Marco()
     {
-
-Clients.All.Polo(DateTime.UtcNow);
+        Clients.All.Polo(DateTime.UtcNow);
     }
 }
 ```
@@ -45,7 +44,7 @@ Clients.All.Polo(DateTime.UtcNow);
 Change your code to look like this:
 
 ```
-hpublic class ExampleHub : SignalRest.Hub
+public class ExampleHub : SignalRest.Hub
 
 {
     public int Add(int a, int b)
@@ -53,10 +52,9 @@ hpublic class ExampleHub : SignalRest.Hub
         return a + b;
     }
 
-
-public void Marco()
+    public void Marco()
     {
-T        Clients.All.Polo(DateTime.UtcNow);
+        Clients.All.Polo(DateTime.UtcNow);
     }
 }
 ```
