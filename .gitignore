@@ -29,3 +29,5 @@ _ReSharper*/
 .vs
 $tf*/
 *.userprefs
+packages/
+*.nupkg
