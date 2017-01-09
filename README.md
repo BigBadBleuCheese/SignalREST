@@ -18,7 +18,7 @@ You can either use the Package Manager Console:
 
     Install-Package Epiforge.SignalREST
 
-Or use the NuGet Package Manager to install Epiforge.SignalREST as a NuGet package in your project.
+Or use the NuGet Package Manager to install `Epiforge.SignalREST` as a NuGet package in your project.
 
 ### Step 2: Make hubs inherit from SignalREST instead of SignalR
 
@@ -51,7 +51,8 @@ public class ExampleHub : SignalRest.Hub
         return a + b;
     }
 
-    public void Marco()
+
+public void Marco()
     {
         Clients.All.Polo(DateTime.UtcNow);
     }
@@ -80,6 +81,35 @@ hub.Clients.All.timeUpdate(DateTime.UtcNow);
 
 SignalREST has equivalents of every part of the SignalR hub connection lifecycle except reconnecting (reconnection logic and the OnReconnected method of your hubs will still work properly for SignalR clients).
 
-### SignalREST URL
+### General SignalREST interface facts
 
-The SignalREST URL will always be the root of your web application, followed by the /signalrest path segment. So, if the default SignalR URL for your web app was 'http://somecompany.com/signalr' then your SignalREST URL will be 'http://somecompany.com/signalrest'.
+The SignalREST base URL will always be the root of your web application, followed by the `/signalrest` path segment. So, if the default SignalR URL for your web app was `http://somecompany.com/signalr` then your SignalREST base URL will be `http://somecompany.com/signalrest`. Therefore, connecting to SignalREST in that example would involve making a request to `http://somecompany.com/signalrest/connect/`.
+
+All SignalREST web requests should be using HTTP POST and should carry a request `Content-Type` header set to `application/json`.
+
+### URLs
+
+#### `/connect/`
+
+Starts a SignalREST connection.
+
+Request body should be a JSON array containing the names of the hubs you want to use. For example:
+
+```
+['examplehub']
+```
+
+Response body will be a JSON string containing the connection ID you will use for all subsequent requests. This connection ID is similar to a SignalR connection ID, and will be used by the server to identify your specific session. For example:
+
+```
+"3125878E-268B-48A9-AD80-A2FA19C9F56E"
+```
+
+You should disconnect when you are finished using SignalREST. If you neglect to do so, SignalREST will automatically terminate and clean up your session in accordance with the SignalR disconnect timeout setting, whatever that happens to be on the server.
+
+#### `/connections/[CONNECTION ID]/disconnect/`
+
+This request will disconnect your SignalREST connection. You should disconnect when you are finished using SignalREST. If you neglect to do so, SignalREST will automatically terminate and clean up your session in accordance with the SignalR disconnect timeout setting, whatever that happens to be on the server.
+
+#### `/connections/[CONNECTION ID]/invoke/[HUB NAME]/[METHOD NAME]/`
+
