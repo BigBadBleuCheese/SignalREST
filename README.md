@@ -14,7 +14,7 @@ SignalREST works with both System.Web (IIS) and OWIN self-hosted configurations 
 
 ### Step 1: Install the NuGet package
 
- You can either use the Package Manager Console:
+You can either use the Package Manager Console:
 
     Install-Package Epiforge.SignalREST
 
@@ -106,7 +106,7 @@ The response body will be a JSON string containing the connection ID you will us
 "61267d37-7754-4471-bde2-6b295130f67f"
 ```
 
-You should disconnect when you are finished using SignalREST. If you neglect to do so, SignalREST will automatically terminate and clean up your session in accordance with the SignalR disconnect timeout setting, whatever that happens to be on the server.
+(Note: Do not include the quotes (`"`) enclosing the connection ID when using it in the URLs below.)
 
 ### `/connections/[CONNECTION ID]/disconnect/`
 
