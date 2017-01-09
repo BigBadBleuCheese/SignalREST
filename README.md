@@ -136,7 +136,6 @@ The response body will be a JSON serialization of whatever the method returns, o
 ```
 
 #### `/connections/[CONNECTION ID]/invoke/`
-
 This request will invoke multiple methods at once.
 
 The request body should be a JSON array containing objects that specify the invocations to make. For example, calling ExampleHub.Add multiple times could have this request body:
@@ -171,7 +170,7 @@ If a the method invocation specified could not be found or failed, the return va
 
 #### `/connections/[CONNECTION ID]/events/`
 
-This request will give you all the SignalR event broadcasts that have been sent to your connection since the connection was started, or the last time you asked.
+This request will give you all the SignalR event broadcasts that have been sent to your connection since the connection was started or the last time you asked, whichever is later.
 
 The request body should be empty.
 
