@@ -80,8 +80,6 @@ hub.Clients.All.timeUpdate(DateTime.UtcNow);
 
 SignalREST has equivalents of every part of the SignalR hub connection lifecycle except reconnecting (reconnection logic and the OnReconnected method of your hubs will still work properly for SignalR clients).
 
-### General SignalREST interface facts
-
 The SignalREST base URL will always be the root of your web application, followed by the `/signalrest` path segment. So, if the default SignalR URL for your web app was `http://somecompany.com/signalr` then your SignalREST base URL will be `http://somecompany.com/signalrest`. Therefore, connecting to SignalREST in that example would involve making a request to `http://somecompany.com/signalrest/connect/`.
 
 All SignalREST web requests should be using HTTP POST and should carry a request `Content-Type` header set to `application/json`.
@@ -92,9 +90,7 @@ SignalREST follows SignalR's conventions for resolving hubs and methods:
 - Method names are case-insensitive
 - Method overloads are permitted, so long as they have varying [arity](https://en.wikipedia.org/wiki/Arity)
 
-### URLs
-
-#### `/connect/`
+### `/connect/`
 
 Starts a SignalREST connection. You should make this request every time you are starting a new session.
 
@@ -112,11 +108,11 @@ The response body will be a JSON string containing the connection ID you will us
 
 You should disconnect when you are finished using SignalREST. If you neglect to do so, SignalREST will automatically terminate and clean up your session in accordance with the SignalR disconnect timeout setting, whatever that happens to be on the server.
 
-#### `/connections/[CONNECTION ID]/disconnect/`
+### `/connections/[CONNECTION ID]/disconnect/`
 
 This request will disconnect your SignalREST connection. You should disconnect when you are finished using SignalREST. If you neglect to do so, SignalREST will automatically terminate and clean up your session in accordance with the SignalR disconnect timeout setting, whatever that happens to be on the server. SignalREST makes note of the last time you made a request for a given connection in order to enforce this. Since SignalR was designed to deliver event broadcasts, you should be making requests to `/connections/[CONNECTION_ID]/events/` (see below) regularly enough to ensure your connection is not automatically disconnected.
 
-#### `/connections/[CONNECTION ID]/invoke/[HUB NAME]/[METHOD NAME]/`
+### `/connections/[CONNECTION ID]/invoke/[HUB NAME]/[METHOD NAME]/`
 
 This request will invoke the specified method of the specified hub.
 
@@ -132,7 +128,7 @@ The response body will be a JSON serialization of whatever the method returns, o
 7
 ```
 
-#### `/connections/[CONNECTION ID]/invoke/`
+### `/connections/[CONNECTION ID]/invoke/`
 This request will invoke multiple methods at once.
 
 The request body should be a JSON array containing objects that specify the invocations to make. For example, calling ExampleHub.Add multiple times could have this request body:
@@ -165,7 +161,7 @@ If a the method invocation specified could not be found or failed, the return va
 - `"Hub method not found"`
 - `"[EXCEPTION TYPE NAME]: [EXCEPTION MESSAGE]"`
 
-#### `/connections/[CONNECTION ID]/events/`
+### `/connections/[CONNECTION ID]/events/`
 
 This request will give you all the SignalR event broadcasts that have been sent to your connection since the connection was started or the last time you asked, whichever is later.
 
