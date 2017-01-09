@@ -6,4 +6,4 @@ Make SignalR hubs available to any REST client.
     Install-Package Epiforge.SignalREST
     
 ## LICENSE
-[Apache 2.0 License](https://github.com/BigBadBleuCheese/SignalREST/blob/master/LICENSE.txt)
+[Apache 2.0 License](https://raw.githubusercontent.com/BigBadBleuCheese/SignalREST/master/LICENSE)
