@@ -45,7 +45,6 @@ Change your code to look like this:
 
 ```
 public class ExampleHub : SignalRest.Hub
-
 {
     public int Add(int a, int b)
     {
