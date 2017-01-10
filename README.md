@@ -155,7 +155,7 @@ The response body will be a JSON array of serialized results of the invocations 
 [3, 7, 11]
 ```
 
-If a the method invocation specified could not be found or failed, the return value at the appropriate index will be a JSON object with a single property named `error`, the value of which will be a string describing what went wrong. Possible error messages include:
+If a method invocation specified could not be found or failed, the return value at the appropriate index will be a JSON object with a single property named `error`, the value of which will be a string describing what went wrong. Possible error messages include:
 
 - `"Hub not found"`
 - `"Hub method not found"`
