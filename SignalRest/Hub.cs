@@ -81,6 +81,7 @@ namespace SignalRest
         public new HubCallerContext Context
         {
             get { return SignalRestContext ?? base.Context; }
+            set { base.Context = value; }
         }
 
         public new IGroupManager Groups
