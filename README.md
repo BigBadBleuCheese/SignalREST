@@ -205,4 +205,4 @@ The request body should be a JSON array containing the names of the hubs you wan
 ['examplehub']
 ```
 
-If a connection with the specified connection ID was not already in progress, the response will be in the same form as the `/connect/` request. If a connection with the specified connection was already in progress, the response will be in the same form as the `/connections/[CONNECTION ID]/events/` request.
+If a connection with the specified connection ID was not already in progress, the response will be in the same form as the `/connect/` request (a JSON string containing the connection ID). If a connection with the specified connection was already in progress, the response will be in the same form as the `/connections/[CONNECTION ID]/events/` request (an array of SignalR event broadcasts).
