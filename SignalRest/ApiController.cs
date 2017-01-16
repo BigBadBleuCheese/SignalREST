@@ -169,13 +169,10 @@ namespace SignalRest
             }
         }
 
-        [HttpPost, Route("connect")]
-        public async Task<IHttpActionResult> Connect([FromBody] string[] hubNames)
+        private async Task<IHttpActionResult> GetConnectResponse(string connectionId, string[] hubNames)
         {
-            string connectionId = null;
             try
             {
-                connectionId = Guid.NewGuid().ToString().ToLowerInvariant();
                 if (hubNames.Any(h => !Hubs.ContainsKey(h)))
                     return NotFound();
                 SessionManagementLock.EnterReadLock();
@@ -217,6 +214,33 @@ namespace SignalRest
             }
         }
 
+        [HttpPost, Route("connect")]
+        public async Task<IHttpActionResult> Connect([FromBody] string[] hubNames)
+        {
+            return await GetConnectResponse(Guid.NewGuid().ToString().ToLowerInvariant(), hubNames);
+        }
+
+        [HttpPost, Route("connections/{connectionId}/reconnect")]
+        public async Task<IHttpActionResult> Reconnect(string connectionId, [FromBody] string[] hubNames)
+        {
+            Session session;
+            bool sessionRetrieved;
+            SessionManagementLock.EnterReadLock();
+            try
+            {
+                sessionRetrieved = Sessions.TryGetValue(connectionId, out session);
+            }
+            finally
+            {
+                SessionManagementLock.ExitReadLock();
+            }
+            if (!sessionRetrieved)
+                return await GetConnectResponse(connectionId, hubNames);
+            if (!session.Hubs.Keys.OrderBy(n => n).SequenceEqual(hubNames.OrderBy(n => n), StringComparer.OrdinalIgnoreCase))
+                return Conflict();
+            return GetEventsResponse(session);
+        }
+
         [HttpPost, Route("connections/{connectionId}/disconnect")]
         public async Task<IHttpActionResult> Disconnect(string connectionId)
         {
@@ -239,6 +263,16 @@ namespace SignalRest
             return Ok();
         }
 
+        private IHttpActionResult GetEventsResponse(Session session)
+        {
+            session.LastKeepAlive = DateTime.UtcNow;
+            var events = new List<ClientInvocation>();
+            ClientInvocation invocation;
+            while (session.ClientInvocations.TryDequeue(out invocation))
+                events.Add(invocation);
+            return Ok(events);
+        }
+
         [HttpPost, Route("connections/{connectionId}/events")]
         public IHttpActionResult Events(string connectionId)
         {
@@ -248,12 +282,7 @@ namespace SignalRest
                 Session session;
                 if (!Sessions.TryGetValue(connectionId, out session))
                     return NotFound();
-                session.LastKeepAlive = DateTime.UtcNow;
-                var events = new List<ClientInvocation>();
-                ClientInvocation invocation;
-                while (session.ClientInvocations.TryDequeue(out invocation))
-                    events.Add(invocation);
-                return Ok(events);
+                return GetEventsResponse(session);
             }
             finally
             {
