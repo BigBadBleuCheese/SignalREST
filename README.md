@@ -197,7 +197,7 @@ An example response body will be a JSON array. The array will be empty if no eve
 
 ### `/connections/[CONNECTION ID]/reconnect/`
 
-Starts a SignalREST connection if it is not already in progress, or retrieves its events if it is already in progress. This request has an overhead by comparison to the `/connections/[CONNECTION ID]/events/` request, sicne it must ensure the hub names it has been provided match the specified session already in progress. Since the client assigning its own connection ID for new connections is considered harmful, you should not use this request as a replacement for the `/connect/` request when the you are knowingly starting a new connection. Only use this request when you are unsure whether the connection has expired and you want to reduce the number of roundtrips to the server.
+Starts a SignalREST connection if it is not already in progress, or retrieves its events if it is already in progress. This request has an overhead by comparison to the `/connections/[CONNECTION ID]/events/` request, since it must ensure the hub names it has been provided match the specified session already in progress. Since the client assigning its own connection ID for new connections is considered harmful, you should not use this request as a replacement for the `/connect/` request when the you are knowingly starting a new connection. Only use this request when you are unsure whether the connection has expired and you want to reduce the number of roundtrips to the server.
 
 The request body should be a JSON array containing the names of the hubs you want to use. For example:
 
