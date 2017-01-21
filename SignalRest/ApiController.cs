@@ -23,7 +23,17 @@ namespace SignalRest
         static ApiController()
         {
             var hubType = typeof(Hub);
-            Hubs = AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes()).Where(t => hubType.IsAssignableFrom(t) && !t.IsAbstract).ToDictionary(t =>
+            Hubs = AppDomain.CurrentDomain.GetAssemblies().SelectMany(a =>
+            {
+                try
+                {
+                    return a.GetTypes();
+                }
+                catch
+                {
+                    return Enumerable.Empty<Type>();
+                }
+            }).Where(t => hubType.IsAssignableFrom(t) && !t.IsAbstract).ToDictionary(t =>
             {
                 var hubNameAttribute = t.GetCustomAttribute<HubNameAttribute>();
                 if (hubNameAttribute != null)
