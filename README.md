@@ -135,17 +135,17 @@ The request body should be a JSON array containing objects that specify the invo
 
 ```
 [{
-	hub: 'examplehub',
-	method: 'add',
-	arguments: [1, 2]
+    hub: 'examplehub',
+    method: 'add',
+    arguments: [1, 2]
 },{
-	hub: 'examplehub',
-	method: 'add',
-	arguments: [3, 4]
+    hub: 'examplehub',
+    method: 'add',
+    arguments: [3, 4]
 },{
-	hub: 'examplehub',
-	method: 'add',
-	arguments: [5, 6]
+    hub: 'examplehub',
+    method: 'add',
+    arguments: [5, 6]
 }]
 ```
 
@@ -206,3 +206,75 @@ The request body should be a JSON array containing the names of the hubs you wan
 ```
 
 If a connection with the specified connection ID was not already in progress, the response will be in the same form as the `/connect/` request (a JSON string containing the connection ID). If a connection with the specified connection was already in progress, the response will be in the same form as the `/connections/[CONNECTION ID]/events/` request (an array of SignalR event broadcasts).
+
+### `/connectAndInvoke/[HUB NAME]/[METHOD NAME]/`
+
+Combines `/connect/` and `/connections/[CONNECTION ID]/invoke/[HUB NAME]/[METHOD NAME]/` into a single request.
+
+The request body should be a JSON object specifying the hubs to which to connect and the arguments of the hub method being invoked. For example:
+
+```
+{
+    HubNames: ['examplehub'],
+    Arguments: [3, 4]
+}
+```
+
+The response body will be JSON object containing the ID of the new connection and the return value of the hub method. For example:
+
+```
+{
+    ConnectionID: "61267d37-7754-4471-bde2-6b295130f67f",
+    ReturnValue: 7
+}
+```
+
+### `/connectAndInvoke/`
+
+Combines `/connect/` and `/connections/[CONNECTION ID]/invoke/` into a single request.
+
+The request body should be a JSON object specifying the hubs to which to connect and the hub methods to invoke. For example:
+
+```
+{
+    HubNames: ['examplehub'],
+    HubMethodInvocations: [{
+        hub: 'examplehub',
+	method: 'add',
+	arguments: [1, 2]
+    },{
+	hub: 'examplehub',
+	method: 'add',
+	arguments: [3, 4]
+    },{
+	hub: 'examplehub',
+	method: 'add',
+	arguments: [5, 6]
+    }]
+}
+```
+
+The response body will be a JSON object containing the ID of the new connection and the return values of the hub methods. For example:
+
+```
+{
+    ConnectionID: "61267d37-7754-4471-bde2-6b295130f67f",
+    ReturnValue: [3, 7, 11]
+}
+```
+
+### `/connections/[CONNECTION ID]/reconnectAndInvoke/[HUB NAME]/[METHOD NAME]/`
+
+Combines the behavior of `/connections/[CONNECTION ID]/reconnect/` and `/connectAndInvoke/[HUB NAME]/[METHOD NAME]/`.
+
+The request body should be in the same format required by `/connectAndInvoke/[HUB NAME]/[METHOD NAME]/`.
+
+If a connection with the specified connection ID was not already in progress, the response will be in the same form as the `/connectAndInvoke/[HUB NAME]/[METHOD NAME]/` request (a JSON object containing the ID of the new connection and the return value of the hub method). If a connection with the specified connection was already in progress, the response will omit the `ConnectionId` property, and instead include an `Events` property, the value of which will be an array of SignalR event broadcasts.
+
+### `/connections/[CONNECTION ID/reconnectAndInvoke/`
+
+Combines the behavior of `/connections/[CONNECTION ID]/reconnect/` and `/connectAndInvoke/`.
+
+The request body should be in the same format required by `/connectAndInvoke/`.
+
+If a connection with the specified connection ID was not already in progress, the response will be in the same form as the `/connectAndInvoke/` request (a JSON object containing the ID of the new connection and the return values of the hub methods). If a connection with the specified connection was already in progress, the response will omit the `ConnectionId` property, and instead include an `Events` property, the value of which will be an array of SignalR event broadcasts.
