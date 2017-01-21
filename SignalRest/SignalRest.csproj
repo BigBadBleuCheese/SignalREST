@@ -98,6 +98,8 @@
     <Compile Include="HubConnectionContextBase.cs" />
     <Compile Include="HubContext.cs" />
     <Compile Include="HubMethodInvocation.cs" />
+    <Compile Include="HubNamesAndArguments.cs" />
+    <Compile Include="HubNamesAndHubMethodInvocations.cs" />
     <Compile Include="NullClientProxy.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="ReflectedHub.cs" />

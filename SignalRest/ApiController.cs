@@ -117,6 +117,82 @@ namespace SignalRest
             }
         }
 
+        private static async Task<object> ExecuteHubMethodInvocation(Session session, IDictionary<string, object> owinEnvironment, HubMethodInvocation invocation)
+        {
+            object invocationResult = null;
+            ReflectedHub reflectedHub;
+            if (!Hubs.TryGetValue(invocation.Hub, out reflectedHub))
+                invocationResult = new { Error = "Hub not found" };
+            else
+            {
+                IReadOnlyDictionary<int, Tuple<Type, Type[], FastMethodInfo>> overloads;
+                if (!reflectedHub.MethodNames.TryGetValue(invocation.Method, out overloads))
+                    invocationResult = new { Error = "Hub method not found" };
+                else
+                {
+                    Tuple<Type, Type[], FastMethodInfo> overload;
+                    if (!overloads.TryGetValue(invocation.Arguments?.Count ?? 0, out overload))
+                        invocationResult = new { Error = "Hub method not found" };
+                    else
+                    {
+                        var argumentsList = new List<object>();
+                        var p = -1;
+                        if (invocation.Arguments != null)
+                            foreach (var child in invocation.Arguments.Children())
+                                argumentsList.Add(JsonConvert.DeserializeObject(child.ToString(), overload.Item2[++p]));
+                        try
+                        {
+                            using (var hub = Hub.GetHub(owinEnvironment, invocation.Hub, session))
+                                invocationResult = overload.Item3.Invoke(hub, argumentsList.ToArray());
+                            if (invocationResult != null)
+                            {
+                                var task = invocationResult as Task;
+                                if (task != null)
+                                {
+                                    await task.ContinueWith(t =>
+                                    {
+                                        if (t.IsFaulted)
+                                            invocationResult = new { Error = string.Format("{0}: {1}", t.Exception.GetType().Name, t.Exception.Message) };
+                                        else
+                                        {
+                                            var type = t.GetType();
+                                            if (type.IsGenericType)
+                                                invocationResult = TaskValueGetters.GetOrAdd(type, CreateTaskValueGetter).Invoke(t);
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            invocationResult = new { Error = string.Format("{0}: {1}", ex.GetType().Name, ex.Message) };
+                        }
+                    }
+                }
+            }
+            return invocationResult;
+        }
+
+        private static async Task<List<object>> ExecuteMultipleHubMethodInvocations(HubMethodInvocation[] invocations, Session session, IDictionary<string, object> owinEnvironment)
+        {
+            var result = new List<object>();
+            foreach (var invocation in invocations)
+            {
+                object invocationResult = await ExecuteHubMethodInvocation(session, owinEnvironment, invocation);
+                result.Add(invocationResult);
+            }
+            return result;
+        }
+
+        private static List<ClientInvocation> GetEvents(Session session)
+        {
+            var events = new List<ClientInvocation>();
+            ClientInvocation invocation;
+            while (session.ClientInvocations.TryDequeue(out invocation))
+                events.Add(invocation);
+            return events;
+        }
+
         internal static void GroupAdd(string hub, string connectionId, string groupName)
         {
             SessionManagementLock.EnterReadLock();
@@ -179,12 +255,14 @@ namespace SignalRest
             }
         }
 
-        private async Task<IHttpActionResult> GetConnectResponse(string connectionId, string[] hubNames)
+        private async Task<Session> PerformConnect(string[] hubNames, string connectionId = null)
         {
             try
             {
                 if (hubNames.Any(h => !Hubs.ContainsKey(h)))
-                    return NotFound();
+                    throw new ArgumentOutOfRangeException(nameof(hubNames));
+                if (connectionId == null)
+                    connectionId = Guid.NewGuid().ToString().ToLowerInvariant();
                 SessionManagementLock.EnterReadLock();
                 Session session;
                 try
@@ -204,7 +282,7 @@ namespace SignalRest
                 foreach (var hubName in hubNames)
                     using (var hub = Hub.GetHub(owinEnvironment, hubName, session))
                         await hub.OnConnected();
-                return Ok(connectionId.ToString().ToLowerInvariant());
+                return session;
             }
             catch
             {
@@ -224,10 +302,65 @@ namespace SignalRest
             }
         }
 
+        private async Task<IHttpActionResult> GetConnectResponse(string[] hubNames, string connectionId = null)
+        {
+            try
+            {
+                return Ok((await PerformConnect(hubNames, connectionId)).ConnectionId);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return NotFound();
+            }
+        }
+
         [HttpPost, Route("connect")]
         public async Task<IHttpActionResult> Connect([FromBody] string[] hubNames)
         {
-            return await GetConnectResponse(Guid.NewGuid().ToString().ToLowerInvariant(), hubNames);
+            return await GetConnectResponse(hubNames);
+        }
+
+        [HttpPost, Route("connectAndInvoke/{hubName}/{methodName}")]
+        public async Task<IHttpActionResult> ConnectAndInvoke(string hubName, string methodName, [FromBody] HubNamesAndArguments hubNamesAndArguments)
+        {
+            Session session;
+            try
+            {
+                session = await PerformConnect(hubNamesAndArguments.HubNames);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return NotFound();
+            }
+            return Ok(new
+            {
+                ConnectionId = session.ConnectionId,
+                ReturnValue = await ExecuteHubMethodInvocation(session, Request.GetOwinEnvironment(), new HubMethodInvocation
+                {
+                    Arguments = hubNamesAndArguments.Arguments,
+                    Hub = hubName,
+                    Method = methodName
+                })
+            });
+        }
+
+        [HttpPost, Route("connectAndInvoke")]
+        public async Task<IHttpActionResult> ConnectAndInvoke([FromBody] HubNamesAndHubMethodInvocations hubNamesAndHubMethodInvocations)
+        {
+            Session session;
+            try
+            {
+                session = await PerformConnect(hubNamesAndHubMethodInvocations.HubNames);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return NotFound();
+            }
+            return Ok(new
+            {
+                ConnectionId = session.ConnectionId,
+                ReturnValues = await ExecuteMultipleHubMethodInvocations(hubNamesAndHubMethodInvocations.HubMethodInvocations, session, Request.GetOwinEnvironment())
+            });
         }
 
         [HttpPost, Route("connections/{connectionId}/reconnect")]
@@ -245,10 +378,94 @@ namespace SignalRest
                 SessionManagementLock.ExitReadLock();
             }
             if (!sessionRetrieved)
-                return await GetConnectResponse(connectionId, hubNames);
+                return await GetConnectResponse(hubNames, connectionId);
             if (!session.Hubs.Keys.OrderBy(n => n).SequenceEqual(hubNames.OrderBy(n => n), StringComparer.OrdinalIgnoreCase))
                 return Conflict();
             return GetEventsResponse(session);
+        }
+
+        [HttpPost, Route("connections/{connectionId}/reconnectAndInvoke/{hubName}/{methodName}")]
+        public async Task<IHttpActionResult> ReconnectAndInvoke(string connectionId, string hubName, string methodName, [FromBody] HubNamesAndArguments hubNamesAndArguments)
+        {
+            Session session;
+            bool sessionRetrieved;
+            SessionManagementLock.EnterReadLock();
+            try
+            {
+                sessionRetrieved = Sessions.TryGetValue(connectionId, out session);
+            }
+            finally
+            {
+                SessionManagementLock.ExitReadLock();
+            }
+            var hubMethodInvocation = new HubMethodInvocation
+            {
+                Arguments = hubNamesAndArguments.Arguments,
+                Hub = hubName,
+                Method = methodName
+            };
+            if (!sessionRetrieved)
+            {
+                try
+                {
+                    session = await PerformConnect(hubNamesAndArguments.HubNames, connectionId);
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    return NotFound();
+                }
+                return Ok(new
+                {
+                    ConnectionId = session.ConnectionId,
+                    ReturnValue = await ExecuteHubMethodInvocation(session, Request.GetOwinEnvironment(), hubMethodInvocation)
+                });
+            }
+            if (!session.Hubs.Keys.OrderBy(n => n).SequenceEqual(hubNamesAndArguments.HubNames.OrderBy(n => n), StringComparer.OrdinalIgnoreCase))
+                return Conflict();
+            return Ok(new
+            {
+                Events = GetEvents(session),
+                ReturnValue = await ExecuteHubMethodInvocation(session, Request.GetOwinEnvironment(), hubMethodInvocation)
+            });
+        }
+
+        [HttpPost, Route("connections/{connectionId}/reconnectAndInvoke")]
+        public async Task<IHttpActionResult> ReconnectAndInvoke(string connectionId, [FromBody] HubNamesAndHubMethodInvocations hubNamesAndHubMethodInvocations)
+        {
+            Session session;
+            bool sessionRetrieved;
+            SessionManagementLock.EnterReadLock();
+            try
+            {
+                sessionRetrieved = Sessions.TryGetValue(connectionId, out session);
+            }
+            finally
+            {
+                SessionManagementLock.ExitReadLock();
+            }
+            if (!sessionRetrieved)
+            {
+                try
+                {
+                    session = await PerformConnect(hubNamesAndHubMethodInvocations.HubNames, connectionId);
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    return NotFound();
+                }
+                return Ok(new
+                {
+                    ConnectionId = session.ConnectionId,
+                    ReturnValues = await ExecuteMultipleHubMethodInvocations(hubNamesAndHubMethodInvocations.HubMethodInvocations, session, Request.GetOwinEnvironment())
+                });
+            }
+            if (!session.Hubs.Keys.OrderBy(n => n).SequenceEqual(hubNamesAndHubMethodInvocations.HubNames.OrderBy(n => n), StringComparer.OrdinalIgnoreCase))
+                return Conflict();
+            return Ok(new
+            {
+                Events = GetEvents(session),
+                ReturnValues = await ExecuteMultipleHubMethodInvocations(hubNamesAndHubMethodInvocations.HubMethodInvocations, session, Request.GetOwinEnvironment())
+            });
         }
 
         [HttpPost, Route("connections/{connectionId}/disconnect")]
@@ -276,11 +493,7 @@ namespace SignalRest
         private IHttpActionResult GetEventsResponse(Session session)
         {
             session.LastKeepAlive = DateTime.UtcNow;
-            var events = new List<ClientInvocation>();
-            ClientInvocation invocation;
-            while (session.ClientInvocations.TryDequeue(out invocation))
-                events.Add(invocation);
-            return Ok(events);
+            return Ok(GetEvents(session));
         }
 
         [HttpPost, Route("connections/{connectionId}/events")]
@@ -315,48 +528,12 @@ namespace SignalRest
                 SessionManagementLock.ExitReadLock();
             }
             session.LastKeepAlive = DateTime.UtcNow;
-            ReflectedHub reflectedHub;
-            if (!Hubs.TryGetValue(hubName, out reflectedHub))
-                return NotFound();
-            IReadOnlyDictionary<int, Tuple<Type, Type[], FastMethodInfo>> overloads;
-            if (!reflectedHub.MethodNames.TryGetValue(methodName, out overloads))
-                return NotFound();
-            Tuple<Type, Type[], FastMethodInfo> overload;
-            if (!overloads.TryGetValue(arguments?.Count ?? 0, out overload))
-                return NotFound();
-            var argumentsList = new List<object>();
-            var p = -1;
-            if (arguments != null)
-                foreach (var child in arguments.Children())
-                    argumentsList.Add(JsonConvert.DeserializeObject(child.ToString(), overload.Item2[++p]));
-            object result;
-            using (var hub = Hub.GetHub(Request.GetOwinEnvironment(), hubName, session))
-                result = overload.Item3.Invoke(hub, argumentsList.ToArray());
-            if (result != null)
+            return Ok(await ExecuteHubMethodInvocation(session, Request.GetOwinEnvironment(), new HubMethodInvocation
             {
-                var task = result as Task;
-                if (task != null)
-                {
-                    IHttpActionResult methodResult = null;
-                    await task.ContinueWith(t =>
-                    {
-                        if (t.IsFaulted)
-                            methodResult = InternalServerError(t.Exception);
-                        else
-                        {
-                            var type = t.GetType();
-                            if (type.IsGenericType)
-                                methodResult = Ok(TaskValueGetters.GetOrAdd(type, CreateTaskValueGetter).Invoke(t));
-                            else
-                                methodResult = Ok();
-                        }
-                    });
-                    return methodResult;
-                }
-                else
-                    return Ok(result);
-            }
-            return Ok();
+                Arguments = arguments,
+                Hub = hubName,
+                Method = methodName,
+            }));
         }
 
         [HttpPost, Route("connections/{connectionId}/invoke")]
@@ -374,64 +551,7 @@ namespace SignalRest
                 SessionManagementLock.ExitReadLock();
             }
             session.LastKeepAlive = DateTime.UtcNow;
-            var owinEnvironment = Request.GetOwinEnvironment();
-            var result = new List<object>();
-            foreach (var invocation in invocations)
-            {
-                object invocationResult = null;
-                ReflectedHub reflectedHub;
-                if (!Hubs.TryGetValue(invocation.Hub, out reflectedHub))
-                    invocationResult = new { error = "Hub not found" };
-                else
-                {
-                    IReadOnlyDictionary<int, Tuple<Type, Type[], FastMethodInfo>> overloads;
-                    if (!reflectedHub.MethodNames.TryGetValue(invocation.Method, out overloads))
-                        invocationResult = new { error = "Hub method not found" };
-                    else
-                    {
-                        Tuple<Type, Type[], FastMethodInfo> overload;
-                        if (!overloads.TryGetValue(invocation.Arguments?.Count ?? 0, out overload))
-                            invocationResult = new { error = "Hub method not found" };
-                        else
-                        {
-                            var argumentsList = new List<object>();
-                            var p = -1;
-                            if (invocation.Arguments != null)
-                                foreach (var child in invocation.Arguments.Children())
-                                    argumentsList.Add(JsonConvert.DeserializeObject(child.ToString(), overload.Item2[++p]));
-                            try
-                            {
-                                using (var hub = Hub.GetHub(Request.GetOwinEnvironment(), invocation.Hub, session))
-                                    invocationResult = overload.Item3.Invoke(hub, argumentsList.ToArray());
-                                if (invocationResult != null)
-                                {
-                                    var task = invocationResult as Task;
-                                    if (task != null)
-                                    {
-                                        await task.ContinueWith(t =>
-                                        {
-                                            if (t.IsFaulted)
-                                                invocationResult = new { error = string.Format("{0}: {1}", t.Exception.GetType().Name, t.Exception.Message) };
-                                            else
-                                            {
-                                                var type = t.GetType();
-                                                if (type.IsGenericType)
-                                                    invocationResult = TaskValueGetters.GetOrAdd(type, CreateTaskValueGetter).Invoke(t);
-                                            }
-                                        });
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                invocationResult = new { error = string.Format("{0}: {1}", ex.GetType().Name, ex.Message) };
-                            }
-                        }
-                    }
-                }
-                result.Add(invocationResult);
-            }
-            return Ok(result);
+            return Ok(await ExecuteMultipleHubMethodInvocations(invocations, session, Request.GetOwinEnvironment()));
         }
     }
 }
