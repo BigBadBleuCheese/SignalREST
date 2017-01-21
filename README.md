@@ -134,19 +134,23 @@ This request will invoke multiple methods at once.
 The request body should be a JSON array containing objects that specify the invocations to make. For example, calling ExampleHub.Add multiple times could have this request body:
 
 ```
-[{
+[
+  {
     hub: 'examplehub',
     method: 'add',
     arguments: [1, 2]
-},{
+  },
+  {
     hub: 'examplehub',
     method: 'add',
     arguments: [3, 4]
-},{
+  },
+  {
     hub: 'examplehub',
     method: 'add',
     arguments: [5, 6]
-}]
+  }
+]
 ```
 
 The response body will be a JSON array of serialized results of the invocations you specified, in the same order as you specified them. For example, the request above would have this response body:
@@ -174,21 +178,24 @@ An example response body will be a JSON array. The array will be empty if no eve
   {
     "Hub": "ExampleHub",
     "Method": "Polo",
-    "Arguments": [
+    "Arguments":
+    [
       "2017-01-09T23:12:58.7377726Z"
     ]
   },
   {
     "Hub": "ExampleHub",
     "Method": "Polo",
-    "Arguments": [
+    "Arguments":
+    [
       "2017-01-09T23:13:01.2331962Z"
     ]
   },
   {
     "Hub": "ExampleHub",
     "Method": "Polo",
-    "Arguments": [
+    "Arguments":
+    [
       "2017-01-09T23:13:05.2539065Z"
     ]
   }
@@ -237,20 +244,25 @@ The request body should be a JSON object specifying the hubs to which to connect
 
 ```
 {
-    HubNames: ['examplehub'],
-    HubMethodInvocations: [{
-        hub: 'examplehub',
-	method: 'add',
-	arguments: [1, 2]
-    },{
-	hub: 'examplehub',
-	method: 'add',
-	arguments: [3, 4]
-    },{
-	hub: 'examplehub',
-	method: 'add',
-	arguments: [5, 6]
-    }]
+  HubNames: ['examplehub'],
+  HubMethodInvocations:
+  [
+    {
+      hub: 'examplehub',
+      method: 'add',
+      arguments: [1, 2]
+    },
+    {
+      hub: 'examplehub',
+      method: 'add',
+      arguments: [3, 4]
+    },
+    {
+      hub: 'examplehub',
+      method: 'add',
+      arguments: [5, 6]
+    }
+  ]
 }
 ```
 
