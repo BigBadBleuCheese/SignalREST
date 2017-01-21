@@ -29,7 +29,18 @@ namespace SignalRest
                 var arity = parameters.Length;
                 if (methodOverloads.ContainsKey(arity))
                     throw new InvalidOperationException("Cannot have more than one method overload (case insensitive) with the same arity");
-                methodOverloads.Add(arity, Tuple.Create(methodInfo.ReturnType, parameters.Select(parameter => parameter.ParameterType).ToArray(), new FastMethodInfo(methodInfo)));
+                FastMethodInfo fastMethodInfo;
+                try
+                {
+                    fastMethodInfo = new FastMethodInfo(methodInfo);
+                }
+                catch
+                {
+                    if (methodOverloads.Count == 0)
+                        methodNames.Remove(methodInfo.Name);
+                    continue;
+                }
+                methodOverloads.Add(arity, Tuple.Create(methodInfo.ReturnType, parameters.Select(parameter => parameter.ParameterType).ToArray(), fastMethodInfo));
             }
             MethodNames = methodNames.ToDictionary(kv => kv.Key, kv => (IReadOnlyDictionary<int, Tuple<Type, Type[], FastMethodInfo>>)kv.Value, StringComparer.OrdinalIgnoreCase);
         }
