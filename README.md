@@ -222,8 +222,8 @@ The request body should be a JSON object specifying the hubs to which to connect
 
 ```
 {
-    HubNames: ['examplehub'],
-    Arguments: [3, 4]
+  HubNames: ['examplehub'],
+  Arguments: [3, 4]
 }
 ```
 
@@ -231,8 +231,8 @@ The response body will be JSON object containing the ID of the new connection an
 
 ```
 {
-    ConnectionID: "61267d37-7754-4471-bde2-6b295130f67f",
-    ReturnValue: 7
+  ConnectionID: "61267d37-7754-4471-bde2-6b295130f67f",
+  ReturnValue: 7
 }
 ```
 
@@ -270,8 +270,8 @@ The response body will be a JSON object containing the ID of the new connection 
 
 ```
 {
-    ConnectionID: "61267d37-7754-4471-bde2-6b295130f67f",
-    ReturnValue: [3, 7, 11]
+  ConnectionID: "61267d37-7754-4471-bde2-6b295130f67f",
+  ReturnValues: [3, 7, 11]
 }
 ```
 
