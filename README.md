@@ -281,7 +281,7 @@ Combines the behavior of `/connections/[CONNECTION ID]/reconnect/` and `/connect
 
 The request body should be in the same format required by `/connectAndInvoke/[HUB NAME]/[METHOD NAME]/`.
 
-If a connection with the specified connection ID was not already in progress, the response will be in the same form as the `/connectAndInvoke/[HUB NAME]/[METHOD NAME]/` request (a JSON object containing the ID of the new connection and the return value of the hub method). If a connection with the specified connection was already in progress, the response will omit the `ConnectionId` property, and instead include an `Events` property, the value of which will be an array of SignalR event broadcasts.
+If a connection with the specified connection ID was not already in progress, the response will be in the same form as the `/connectAndInvoke/[HUB NAME]/[METHOD NAME]/` response (a JSON object containing the ID of the new connection and the return value of the hub method). If a connection with the specified connection was already in progress, the response will omit the `ConnectionId` property, and instead include an `Events` property, the value of which will be an array of SignalR event broadcasts.
 
 ### `/connections/[CONNECTION ID/reconnectAndInvoke/`
 
@@ -289,4 +289,4 @@ Combines the behavior of `/connections/[CONNECTION ID]/reconnect/` and `/connect
 
 The request body should be in the same format required by `/connectAndInvoke/`.
 
-If a connection with the specified connection ID was not already in progress, the response will be in the same form as the `/connectAndInvoke/` request (a JSON object containing the ID of the new connection and the return values of the hub methods). If a connection with the specified connection was already in progress, the response will omit the `ConnectionId` property, and instead include an `Events` property, the value of which will be an array of SignalR event broadcasts.
+If a connection with the specified connection ID was not already in progress, the response will be in the same form as the `/connectAndInvoke/` response (a JSON object containing the ID of the new connection and the return values of the hub methods). If a connection with the specified connection was already in progress, the response will omit the `ConnectionId` property, and instead include an `Events` property, the value of which will be an array of SignalR event broadcasts.
