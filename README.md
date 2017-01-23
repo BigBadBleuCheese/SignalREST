@@ -128,7 +128,7 @@ The response body will be a JSON serialization of whatever the method returns, o
 7
 ```
 
-Or, if the method invocation specified could not be found or failed, the return value response will be a JSON object with a single property named `Error`, the value of which will be a string describing what went wrong. Possible error messages include:
+Or, if the method invocation specified could not be found or failed, the response will be a JSON object with a single property named `Error`, the value of which will be a string describing what went wrong. Possible error messages include:
 
 - `"Hub not found"`
 - `"Hub method not found"`
