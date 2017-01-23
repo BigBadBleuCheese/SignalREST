@@ -287,7 +287,7 @@ If a connection with the specified connection ID was not already in progress, th
 
 _Note: When and if a response contains a connection ID, that connection ID may be different than the one that appeared in the request, is authoritative, and should be used in subsequent requests to identify the connection._
 
-### `/connections/[CONNECTION ID/reconnectAndInvoke/`
+### `/connections/[CONNECTION ID]/reconnectAndInvoke/`
 
 Combines the behavior of `/connections/[CONNECTION ID]/reconnect/` and `/connectAndInvoke/`.
 
