@@ -214,7 +214,7 @@ The request body should be a JSON array containing the names of the hubs you wan
 
 If a connection with the specified connection ID was not already in progress, the response will be in the same form as the `/connect/` request (a JSON string containing the connection ID). If a connection with the specified connection was already in progress, the response will be in the same form as the `/connections/[CONNECTION ID]/events/` request (an array of SignalR event broadcasts).
 
-_Note: When and if a response contains a connection ID, that connection ID may be different than the one that appeared in the request, is authoritative, should be used in subsequent requests to identify the connection._
+_Note: When and if a response contains a connection ID, that connection ID may be different than the one that appeared in the request, is authoritative, and should be used in subsequent requests to identify the connection._
 
 ### `/connectAndInvoke/[HUB NAME]/[METHOD NAME]/`
 
@@ -285,7 +285,7 @@ The request body should be in the same format required by `/connectAndInvoke/[HU
 
 If a connection with the specified connection ID was not already in progress, the response will be in the same form as the `/connectAndInvoke/[HUB NAME]/[METHOD NAME]/` response (a JSON object containing the ID of the new connection and the return value of the hub method). If a connection with the specified connection was already in progress, the response will omit the `ConnectionId` property, and instead include an `Events` property, the value of which will be an array of SignalR event broadcasts.
 
-_Note: When and if a response contains a connection ID, that connection ID may be different than the one that appeared in the request, is authoritative, should be used in subsequent requests to identify the connection._
+_Note: When and if a response contains a connection ID, that connection ID may be different than the one that appeared in the request, is authoritative, and should be used in subsequent requests to identify the connection._
 
 ### `/connections/[CONNECTION ID/reconnectAndInvoke/`
 
@@ -295,4 +295,4 @@ The request body should be in the same format required by `/connectAndInvoke/`.
 
 If a connection with the specified connection ID was not already in progress, the response will be in the same form as the `/connectAndInvoke/` response (a JSON object containing the ID of the new connection and the return values of the hub methods). If a connection with the specified connection was already in progress, the response will omit the `ConnectionId` property, and instead include an `Events` property, the value of which will be an array of SignalR event broadcasts.
 
-_Note: When and if a response contains a connection ID, that connection ID may be different than the one that appeared in the request, is authoritative, should be used in subsequent requests to identify the connection._
+_Note: When and if a response contains a connection ID, that connection ID may be different than the one that appeared in the request, is authoritative, and should be used in subsequent requests to identify the connection._
