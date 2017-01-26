@@ -61,14 +61,14 @@ In any case where you are getting a HubContext, ask SignalREST for it instead of
 
 In this example...
 
-```JavaScript
+```C#
 var hub = GlobalHost.ConnectionManager.GetHubContext<ExampleHub>();
 hub.Clients.All.timeUpdate(DateTime.UtcNow);
 ```
 
 Change your code to look like this:
 
-```JavaScript
+```C#
 var hub = SignalRest.Hub.GetHubContext<ExampleHub>();
 hub.Clients.All.timeUpdate(DateTime.UtcNow);
 ```
