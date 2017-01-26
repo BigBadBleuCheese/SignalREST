@@ -227,8 +227,8 @@ The request body should be a JSON object specifying the hubs to which to connect
 
 ```JSON
 {
-  HubNames: ["examplehub"],
-  Arguments: [3, 4]
+  "HubNames": ["examplehub"],
+  "Arguments": [3, 4]
 }
 ```
 
