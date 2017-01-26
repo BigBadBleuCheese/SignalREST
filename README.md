@@ -94,7 +94,7 @@ Starts a SignalREST connection. You should make this request every time you are 
 The request body should be a JSON array containing the names of the hubs you want to use. For example:
 
 ```JSON
-['examplehub']
+["examplehub"]
 ```
 
 The response body will be a JSON string containing the connection ID you will use for all subsequent requests. This connection ID is similar to a SignalR connection ID, and will be used by the server to identify your specific session. For example:
@@ -139,19 +139,19 @@ The request body should be a JSON array containing objects that specify the invo
 ```JSON
 [
   {
-    hub: 'examplehub',
-    method: 'add',
-    arguments: [1, 2]
+    "hub": "examplehub",
+    "method": "add",
+    "arguments": [1, 2]
   },
   {
-    hub: 'examplehub',
-    method: 'add',
-    arguments: [3, 4]
+    "hub": "examplehub",
+    "method": "add",
+    "arguments": [3, 4]
   },
   {
-    hub: 'examplehub',
-    method: 'add',
-    arguments: [5, 6]
+    "hub": "examplehub",
+    "method": "add",
+    "arguments": [5, 6]
   }
 ]
 ```
@@ -212,7 +212,7 @@ Starts a SignalREST connection if it is not already in progress, or retrieves it
 The request body should be a JSON array containing the names of the hubs you want to use. For example:
 
 ```JSON
-['examplehub']
+["examplehub"]
 ```
 
 If a connection with the specified connection ID was not already in progress, the response will be in the same form as the `/connect/` request (a JSON string containing the connection ID). If a connection with the specified connection was already in progress, the response will be in the same form as the `/connections/[CONNECTION ID]/events/` request (an array of SignalR event broadcasts).
@@ -227,7 +227,7 @@ The request body should be a JSON object specifying the hubs to which to connect
 
 ```JSON
 {
-  HubNames: ['examplehub'],
+  HubNames: ["examplehub"],
   Arguments: [3, 4]
 }
 ```
@@ -236,8 +236,8 @@ The response body will be JSON object containing the ID of the new connection an
 
 ```JSON
 {
-  ConnectionID: "61267d37-7754-4471-bde2-6b295130f67f",
-  ReturnValue: 7
+  "ConnectionID": "61267d37-7754-4471-bde2-6b295130f67f",
+  "ReturnValue": 7
 }
 ```
 
@@ -249,23 +249,23 @@ The request body should be a JSON object specifying the hubs to which to connect
 
 ```JSON
 {
-  HubNames: ['examplehub'],
-  HubMethodInvocations:
+  "HubNames": ["examplehub"],
+  "HubMethodInvocations":
   [
     {
-      hub: 'examplehub',
-      method: 'add',
-      arguments: [1, 2]
+      "hub": "examplehub",
+      "method": "add",
+      "arguments": [1, 2]
     },
     {
-      hub: 'examplehub',
-      method: 'add',
-      arguments: [3, 4]
+      "hub": "examplehub",
+      "method": "add",
+      "arguments": [3, 4]
     },
     {
-      hub: 'examplehub',
-      method: 'add',
-      arguments: [5, 6]
+      "hub": "examplehub",
+      "method": "add",
+      "arguments": [5, 6]
     }
   ]
 }
@@ -275,8 +275,8 @@ The response body will be a JSON object containing the ID of the new connection 
 
 ```JSON
 {
-  ConnectionID: "61267d37-7754-4471-bde2-6b295130f67f",
-  ReturnValues: [3, 7, 11]
+  "ConnectionID": "61267d37-7754-4471-bde2-6b295130f67f",
+  "ReturnValues": [3, 7, 11]
 }
 ```
 
