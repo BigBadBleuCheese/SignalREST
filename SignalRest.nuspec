@@ -10,7 +10,6 @@
     <projectUrl>https://github.com/BigBadBleuCheese/SignalREST</projectUrl>
     <requireLicenseAcceptance>true</requireLicenseAcceptance>
     <description>Make SignalR hubs available to any REST client.</description>
-    <releaseNotes>Initial release.</releaseNotes>
     <copyright>Copyright 2017</copyright>
     <tags>Microsoft AspNet SignalR AspNetSignalR WebApi AspNetWebApi Epiforge Rest</tags>
     <dependencies>
