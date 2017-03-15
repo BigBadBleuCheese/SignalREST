@@ -23,6 +23,7 @@ namespace SignalRest
                 hub = (Hub)Activator.CreateInstance(hubType);
                 hub.SignalRestClients = new HubConnectionContext(hubName, session.ConnectionId);
                 hub.SignalRestContext = new HubCallerContext(new HostContext(environment).Request, session.ConnectionId);
+                hub.SignalRestEnvironment = environment;
                 hub.SignalRestGroups = new GroupManager(hubName);
                 hub.IsSignalRestInitialized = true;
             }
@@ -66,6 +67,7 @@ namespace SignalRest
 
         private IHubCallerConnectionContext<dynamic> SignalRestClients { get; set; }
         private HubCallerContext SignalRestContext { get; set; }
+        private IDictionary<string, object> SignalRestEnvironment { get; set; }
         private IGroupManager SignalRestGroups { get; set; }
         private bool IsSignalRestInitialized { get; set; }
 
@@ -82,6 +84,11 @@ namespace SignalRest
         {
             get { return SignalRestContext ?? base.Context; }
             set { base.Context = value; }
+        }
+
+        public IDictionary<string, object> Environment
+        {
+            get { return SignalRestEnvironment ?? base.Context.Request.Environment; }
         }
 
         public new IGroupManager Groups
