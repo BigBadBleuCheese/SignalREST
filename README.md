@@ -1,8 +1,5 @@
 # SignalREST
 Make SignalR hubs available to any REST client.
-    
-## LICENSE
-[Apache 2.0 License](https://raw.githubusercontent.com/BigBadBleuCheese/SignalREST/master/LICENSE)
 
 ## What is this for?
 
@@ -26,7 +23,7 @@ Instead of your hubs inheriting from **Microsoft.AspNet.SignalR.Hub**, you want 
 
 In this example hub...
 
-```
+```C#
 public class ExampleHub : Microsoft.AspNet.SignalR.Hub
 {
     public int Add(int a, int b)
@@ -43,7 +40,7 @@ public class ExampleHub : Microsoft.AspNet.SignalR.Hub
 
 Change your code to look like this:
 
-```
+```C#
 public class ExampleHub : SignalRest.Hub
 {
     public int Add(int a, int b)
@@ -64,14 +61,14 @@ In any case where you are getting a HubContext, ask SignalREST for it instead of
 
 In this example...
 
-```
+```C#
 var hub = GlobalHost.ConnectionManager.GetHubContext<ExampleHub>();
 hub.Clients.All.timeUpdate(DateTime.UtcNow);
 ```
 
 Change your code to look like this:
 
-```
+```C#
 var hub = SignalRest.Hub.GetHubContext<ExampleHub>();
 hub.Clients.All.timeUpdate(DateTime.UtcNow);
 ```
@@ -96,13 +93,13 @@ Starts a SignalREST connection. You should make this request every time you are 
 
 The request body should be a JSON array containing the names of the hubs you want to use. For example:
 
-```
-['examplehub']
+```JSON
+["examplehub"]
 ```
 
 The response body will be a JSON string containing the connection ID you will use for all subsequent requests. This connection ID is similar to a SignalR connection ID, and will be used by the server to identify your specific session. For example:
 
-```
+```JSON
 "61267d37-7754-4471-bde2-6b295130f67f"
 ```
 
@@ -118,13 +115,13 @@ This request will invoke the specified method of the specified hub.
 
 The request body should be a JSON array containing the arguments of the method being invoked. It may also be `null` or empty if the method has no arguments. For example, invoking ExampleHub.Add(3, 4) would have this request body:
 
-```
+```JSON
 [3, 4]
 ```
 
 The response body will be a JSON serialization of whatever the method returns, or empty if it the method is of type `void`. For example, our invocation of ExampleHub.Add(3, 4) would have this response body:
 
-```
+```JSON
 7
 ```
 
@@ -139,29 +136,29 @@ This request will invoke multiple methods at once.
 
 The request body should be a JSON array containing objects that specify the invocations to make. For example, calling ExampleHub.Add multiple times could have this request body:
 
-```
+```JSON
 [
   {
-    hub: 'examplehub',
-    method: 'add',
-    arguments: [1, 2]
+    "hub": "examplehub",
+    "method": "add",
+    "arguments": [1, 2]
   },
   {
-    hub: 'examplehub',
-    method: 'add',
-    arguments: [3, 4]
+    "hub": "examplehub",
+    "method": "add",
+    "arguments": [3, 4]
   },
   {
-    hub: 'examplehub',
-    method: 'add',
-    arguments: [5, 6]
+    "hub": "examplehub",
+    "method": "add",
+    "arguments": [5, 6]
   }
 ]
 ```
 
 The response body will be a JSON array of serialized results of the invocations you specified, in the same order as you specified them. For example, the request above would have this response body:
 
-```
+```JSON
 [3, 7, 11]
 ```
 
@@ -179,7 +176,7 @@ The request body should be empty.
 
 An example response body will be a JSON array. The array will be empty if no events have been raised since the connection was started or the last time you asked. A request returning events looks like this:
 
-```
+```JSON
 [
   {
     "Hub": "ExampleHub",
@@ -214,8 +211,8 @@ Starts a SignalREST connection if it is not already in progress, or retrieves it
 
 The request body should be a JSON array containing the names of the hubs you want to use. For example:
 
-```
-['examplehub']
+```JSON
+["examplehub"]
 ```
 
 If a connection with the specified connection ID was not already in progress, the response will be in the same form as the `/connect/` request (a JSON string containing the connection ID). If a connection with the specified connection was already in progress, the response will be in the same form as the `/connections/[CONNECTION ID]/events/` request (an array of SignalR event broadcasts).
@@ -228,19 +225,19 @@ Combines `/connect/` and `/connections/[CONNECTION ID]/invoke/[HUB NAME]/[METHOD
 
 The request body should be a JSON object specifying the hubs to which to connect and the arguments of the hub method being invoked. For example:
 
-```
+```JSON
 {
-  HubNames: ['examplehub'],
-  Arguments: [3, 4]
+  "HubNames": ["examplehub"],
+  "Arguments": [3, 4]
 }
 ```
 
 The response body will be JSON object containing the ID of the new connection and the return value of the hub method. For example:
 
-```
+```JSON
 {
-  ConnectionID: "61267d37-7754-4471-bde2-6b295130f67f",
-  ReturnValue: 7
+  "ConnectionID": "61267d37-7754-4471-bde2-6b295130f67f",
+  "ReturnValue": 7
 }
 ```
 
@@ -250,25 +247,25 @@ Combines `/connect/` and `/connections/[CONNECTION ID]/invoke/` into a single re
 
 The request body should be a JSON object specifying the hubs to which to connect and the hub methods to invoke. For example:
 
-```
+```JSON
 {
-  HubNames: ['examplehub'],
-  HubMethodInvocations:
+  "HubNames": ["examplehub"],
+  "HubMethodInvocations":
   [
     {
-      hub: 'examplehub',
-      method: 'add',
-      arguments: [1, 2]
+      "hub": "examplehub",
+      "method": "add",
+      "arguments": [1, 2]
     },
     {
-      hub: 'examplehub',
-      method: 'add',
-      arguments: [3, 4]
+      "hub": "examplehub",
+      "method": "add",
+      "arguments": [3, 4]
     },
     {
-      hub: 'examplehub',
-      method: 'add',
-      arguments: [5, 6]
+      "hub": "examplehub",
+      "method": "add",
+      "arguments": [5, 6]
     }
   ]
 }
@@ -276,10 +273,10 @@ The request body should be a JSON object specifying the hubs to which to connect
 
 The response body will be a JSON object containing the ID of the new connection and the return values of the hub methods. For example:
 
-```
+```JSON
 {
-  ConnectionID: "61267d37-7754-4471-bde2-6b295130f67f",
-  ReturnValues: [3, 7, 11]
+  "ConnectionID": "61267d37-7754-4471-bde2-6b295130f67f",
+  "ReturnValues": [3, 7, 11]
 }
 ```
 
@@ -302,3 +299,6 @@ The request body should be in the same format required by `/connectAndInvoke/`.
 If a connection with the specified connection ID was not already in progress, the response will be in the same form as the `/connectAndInvoke/` response (a JSON object containing the ID of the new connection and the return values of the hub methods). If a connection with the specified connection was already in progress, the response will omit the `ConnectionId` property, and instead include an `Events` property, the value of which will be an array of SignalR event broadcasts.
 
 _Note: When and if a response contains a connection ID, that connection ID may be different than the one that appeared in the request, is authoritative, and should be used in subsequent requests to identify the connection._
+    
+## License
+[Apache 2.0 License](https://raw.githubusercontent.com/BigBadBleuCheese/SignalREST/master/LICENSE)
