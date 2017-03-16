@@ -73,6 +73,10 @@ var hub = SignalRest.Hub.GetHubContext<ExampleHub>();
 hub.Clients.All.timeUpdate(DateTime.UtcNow);
 ```
 
+### Step 4: Get OWIN environments from SignalREST instead of SignalR
+
+In instanced methods of SignalREST hubs, use the `Environment` property to get the current OWIN environment dictionary instead of any other method using SignalR properties.
+
 ## How REST consumers can now use your SignalR hubs
 
 SignalREST has equivalents of every part of the SignalR hub connection lifecycle except reconnecting (reconnection logic and the OnReconnected method of your hubs will still work properly for SignalR clients).
