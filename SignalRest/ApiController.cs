@@ -48,13 +48,13 @@ namespace SignalRest
                 try
                 {
                     var now = DateTime.UtcNow;
-                    var disconnectedConnectionIds = Sessions.Where(kv => kv.Value.LastKeepAlive + GlobalHost.Configuration.DisconnectTimeout < now).Select(kv => kv.Key);
+                    var disconnectedConnectionIds = Sessions.Where(kv => kv.Value.LastKeepAlive + GlobalHost.Configuration.DisconnectTimeout < now).Select(kv => kv.Key).ToArray();
                     foreach (var disconnectedConnectionId in disconnectedConnectionIds)
                     {
                         var session = Sessions[disconnectedConnectionId];
                         Sessions.Remove(disconnectedConnectionId);
                         foreach (var hubName in session.Hubs)
-                            using (var hub = Hub.GetHub(null, hubName.Key, session))
+                            using (var hub = Hub.GetHub(session.LastOwinDictionary, hubName.Key, session))
                                 hub.OnDisconnected(false).Wait();
                     }
                 }
@@ -270,7 +270,8 @@ namespace SignalRest
                     session = new Session(hubNames)
                     {
                         ConnectionId = connectionId,
-                        LastKeepAlive = DateTime.UtcNow
+                        LastKeepAlive = DateTime.UtcNow,
+                        LastOwinDictionary = Request.GetOwinEnvironment()
                     };
                     Sessions.Add(connectionId, session);
                 }
@@ -493,6 +494,7 @@ namespace SignalRest
         private IHttpActionResult GetEventsResponse(Session session)
         {
             session.LastKeepAlive = DateTime.UtcNow;
+            session.LastOwinDictionary = Request.GetOwinEnvironment();
             return Ok(GetEvents(session));
         }
 
@@ -528,6 +530,7 @@ namespace SignalRest
                 SessionManagementLock.ExitReadLock();
             }
             session.LastKeepAlive = DateTime.UtcNow;
+            session.LastOwinDictionary = Request.GetOwinEnvironment();
             return Ok(await ExecuteHubMethodInvocation(session, Request.GetOwinEnvironment(), new HubMethodInvocation
             {
                 Arguments = arguments,
@@ -551,6 +554,7 @@ namespace SignalRest
                 SessionManagementLock.ExitReadLock();
             }
             session.LastKeepAlive = DateTime.UtcNow;
+            session.LastOwinDictionary = Request.GetOwinEnvironment();
             return Ok(await ExecuteMultipleHubMethodInvocations(invocations, session, Request.GetOwinEnvironment()));
         }
     }

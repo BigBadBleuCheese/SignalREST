@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace SignalRest
@@ -16,5 +17,6 @@ namespace SignalRest
         public string ConnectionId { get; set; }
         public ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> Hubs { get; set; }
         public DateTime LastKeepAlive { get; set; }
+        public IDictionary<string, object> LastOwinDictionary { get; set; }
     }
 }
