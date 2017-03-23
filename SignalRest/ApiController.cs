@@ -139,7 +139,7 @@ namespace SignalRest
                         var p = -1;
                         if (invocation.Arguments != null)
                             foreach (var child in invocation.Arguments.Children())
-                                argumentsList.Add(JsonConvert.DeserializeObject(child.ToString(), overload.Item2[++p]));
+                                argumentsList.Add(child.ToObject(overload.Item2[++p]));
                         try
                         {
                             using (var hub = Hub.GetHub(owinEnvironment, invocation.Hub, session))
