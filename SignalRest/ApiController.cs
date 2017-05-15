@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNet.SignalR;
 using Microsoft.AspNet.SignalR.Hubs;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
@@ -53,9 +52,18 @@ namespace SignalRest
                     {
                         var session = Sessions[disconnectedConnectionId];
                         Sessions.Remove(disconnectedConnectionId);
-                        foreach (var hubName in session.Hubs)
-                            using (var hub = Hub.GetHub(session.LastOwinDictionary, hubName.Key, session))
-                                hub.OnDisconnected(false).Wait();
+                        foreach (var hubDescriptor in session.Hubs)
+                        {
+                            try
+                            {
+                                using (var hub = Hub.GetHub(session.LastOwinDictionary, hubDescriptor.Key, session))
+                                    hub.OnDisconnected(false).Wait();
+                            }
+                            catch (Exception ex)
+                            {
+                                OnSessionManagementException(new SessionManagementExceptionEventArgs(ex, disconnectedConnectionId, hubDescriptor.Key));
+                            }
+                        }
                     }
                 }
                 finally
@@ -72,6 +80,8 @@ namespace SignalRest
         private static Timer SessionManager { get; }
         private static ReaderWriterLockSlim SessionManagementLock { get; }
         private static ConcurrentDictionary<Type, FastMethodInfo> TaskValueGetters { get; }
+
+        public static event EventHandler<SessionManagementExceptionEventArgs> SessionManagementException;
 
         internal static void ClientProxyInvoke(IList<string> exclude, string hub, string method, params object[] args)
         {
@@ -313,6 +323,11 @@ namespace SignalRest
             {
                 return NotFound();
             }
+        }
+
+        private static void OnSessionManagementException(SessionManagementExceptionEventArgs e)
+        {
+            SessionManagementException?.Invoke(null, e);
         }
 
         [HttpPost, Route("connect")]

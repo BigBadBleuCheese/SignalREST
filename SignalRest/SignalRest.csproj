@@ -103,6 +103,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="ReflectedHub.cs" />
     <Compile Include="Session.cs" />
+    <Compile Include="SessionManagementExceptionEventArgs.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
