@@ -39,59 +39,27 @@ namespace SignalRest
                     return hubNameAttribute.HubName.ToLowerInvariant();
                 return t.Name.ToLowerInvariant();
             }, t => new ReflectedHub(t), StringComparer.OrdinalIgnoreCase);
-            Sessions = new Dictionary<string, Session>(StringComparer.OrdinalIgnoreCase);
-            SessionManagementLock = new ReaderWriterLockSlim();
-            SessionManager = new Timer(new TimerCallback(state =>
-            {
-                SessionManagementLock.EnterWriteLock();
-                try
-                {
-                    var now = DateTime.UtcNow;
-                    var disconnectedConnectionIds = Sessions.Where(kv => kv.Value.LastKeepAlive + GlobalHost.Configuration.DisconnectTimeout < now).Select(kv => kv.Key).ToArray();
-                    foreach (var disconnectedConnectionId in disconnectedConnectionIds)
-                    {
-                        var session = Sessions[disconnectedConnectionId];
-                        Sessions.Remove(disconnectedConnectionId);
-                        foreach (var hubDescriptor in session.Hubs)
-                        {
-                            try
-                            {
-                                using (var hub = Hub.GetHub(session.LastOwinDictionary, hubDescriptor.Key, session))
-                                    hub.OnDisconnected(false).Wait();
-                            }
-                            catch (Exception ex)
-                            {
-                                OnSessionManagementException(new SessionManagementExceptionEventArgs(ex, disconnectedConnectionId, hubDescriptor.Key));
-                            }
-                        }
-                    }
-                }
-                finally
-                {
-                    SessionManagementLock.ExitWriteLock();
-                    SessionManager.Change(GlobalHost.Configuration.KeepAlive ?? TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(-1));
-                }
-            }), null, GlobalHost.Configuration.KeepAlive ?? TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(-1));
-            TaskValueGetters = new ConcurrentDictionary<Type, FastMethodInfo>();
+            sessionManager = new Timer(SessionManagerTick, null, GlobalHost.Configuration.KeepAlive ?? TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(-1));
+            taskValueGetters = new ConcurrentDictionary<Type, FastMethodInfo>();
         }
 
-        internal static IReadOnlyDictionary<string, ReflectedHub> Hubs { get; }
-        private static Dictionary<string, Session> Sessions { get; }
-        private static Timer SessionManager { get; }
-        private static ReaderWriterLockSlim SessionManagementLock { get; }
-        private static ConcurrentDictionary<Type, FastMethodInfo> TaskValueGetters { get; }
+        internal static readonly IReadOnlyDictionary<string, ReflectedHub> Hubs;
+        static readonly Dictionary<string, Session> sessions = new Dictionary<string, Session>(StringComparer.OrdinalIgnoreCase);
+        static readonly Timer sessionManager;
+        static readonly ReaderWriterLockSlim sessionManagementLock = new ReaderWriterLockSlim();
+        static readonly ConcurrentDictionary<Type, FastMethodInfo> taskValueGetters;
 
         public static event EventHandler<SessionManagementExceptionEventArgs> SessionManagementException;
 
         internal static void ClientProxyInvoke(IList<string> exclude, string hub, string method, params object[] args)
         {
-            SessionManagementLock.EnterReadLock();
+            sessionManagementLock.EnterReadLock();
             var excludeSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (exclude != null)
                 excludeSet.UnionWith(exclude);
             try
             {
-                foreach (var session in Sessions)
+                foreach (var session in sessions)
                 {
                     if (session.Value.Hubs.ContainsKey(hub) && !excludeSet.Contains(session.Key))
                         session.Value.ClientInvocations.Enqueue(new ClientInvocation(hub, method, args));
@@ -99,35 +67,35 @@ namespace SignalRest
             }
             finally
             {
-                SessionManagementLock.ExitReadLock();
+                sessionManagementLock.ExitReadLock();
             }
-        }
-
-        private static FastMethodInfo CreateTaskValueGetter(Type type)
-        {
-            return new FastMethodInfo(type.GetProperty(nameof(Task<object>.Result)).GetGetMethod());
         }
 
         internal static void ConnectionIdsInvoke(IList<string> connectionIds, string hub, string method, params object[] args)
         {
-            SessionManagementLock.EnterReadLock();
+            sessionManagementLock.EnterReadLock();
             try
             {
                 foreach (var connectionId in connectionIds)
                 {
                     Session session;
-                    if (Sessions.TryGetValue(connectionId, out session))
+                    if (sessions.TryGetValue(connectionId, out session))
                         if (session.Hubs.ContainsKey(hub))
                             session.ClientInvocations.Enqueue(new ClientInvocation(hub, method, args));
                 }
             }
             finally
             {
-                SessionManagementLock.ExitReadLock();
+                sessionManagementLock.ExitReadLock();
             }
         }
 
-        private static async Task<object> ExecuteHubMethodInvocation(Session session, IDictionary<string, object> owinEnvironment, HubMethodInvocation invocation)
+        static FastMethodInfo CreateTaskValueGetter(Type type)
+        {
+            return new FastMethodInfo(type.GetProperty(nameof(Task<object>.Result)).GetGetMethod());
+        }
+
+        static async Task<object> ExecuteHubMethodInvocation(Session session, HttpRequestMessage requestMessage, HubMethodInvocation invocation)
         {
             object invocationResult = null;
             ReflectedHub reflectedHub;
@@ -152,7 +120,7 @@ namespace SignalRest
                                 argumentsList.Add(child.ToObject(overload.Item2[++p]));
                         try
                         {
-                            using (var hub = Hub.GetHub(owinEnvironment, invocation.Hub, session))
+                            using (var hub = Hub.GetHub(requestMessage, invocation.Hub, session))
                                 invocationResult = overload.Item3.Invoke(hub, argumentsList.ToArray());
                             if (invocationResult != null)
                             {
@@ -167,7 +135,7 @@ namespace SignalRest
                                         {
                                             var type = t.GetType();
                                             if (type.IsGenericType)
-                                                invocationResult = TaskValueGetters.GetOrAdd(type, CreateTaskValueGetter).Invoke(t);
+                                                invocationResult = taskValueGetters.GetOrAdd(type, CreateTaskValueGetter).Invoke(t);
                                         }
                                     });
                                 }
@@ -183,18 +151,18 @@ namespace SignalRest
             return invocationResult;
         }
 
-        private static async Task<List<object>> ExecuteMultipleHubMethodInvocations(HubMethodInvocation[] invocations, Session session, IDictionary<string, object> owinEnvironment)
+        static async Task<List<object>> ExecuteMultipleHubMethodInvocations(HubMethodInvocation[] invocations, Session session, HttpRequestMessage requestMessage)
         {
             var result = new List<object>();
             foreach (var invocation in invocations)
             {
-                object invocationResult = await ExecuteHubMethodInvocation(session, owinEnvironment, invocation);
+                object invocationResult = await ExecuteHubMethodInvocation(session, requestMessage, invocation);
                 result.Add(invocationResult);
             }
             return result;
         }
 
-        private static List<ClientInvocation> GetEvents(Session session)
+        static List<ClientInvocation> GetEvents(Session session)
         {
             var events = new List<ClientInvocation>();
             ClientInvocation invocation;
@@ -205,11 +173,11 @@ namespace SignalRest
 
         internal static void GroupAdd(string hub, string connectionId, string groupName)
         {
-            SessionManagementLock.EnterReadLock();
+            sessionManagementLock.EnterReadLock();
             try
             {
                 Session session;
-                if (Sessions.TryGetValue(connectionId, out session))
+                if (sessions.TryGetValue(connectionId, out session))
                 {
                     ConcurrentDictionary<string, byte> groups;
                     if (session.Hubs.TryGetValue(hub, out groups))
@@ -218,19 +186,19 @@ namespace SignalRest
             }
             finally
             {
-                SessionManagementLock.ExitReadLock();
+                sessionManagementLock.ExitReadLock();
             }
         }
 
         internal static void GroupNamesInvoke(IList<string> groupNames, IList<string> exclude, string hub, string method, params object[] args)
         {
-            SessionManagementLock.EnterReadLock();
+            sessionManagementLock.EnterReadLock();
             var excludeSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (exclude != null)
                 excludeSet.UnionWith(exclude);
             try
             {
-                foreach (var session in Sessions)
+                foreach (var session in sessions)
                 {
                     ConcurrentDictionary<string, byte> groups;
                     if (session.Value.Hubs.TryGetValue(hub, out groups) && !excludeSet.Contains(session.Key) && groupNames.Any(groupName => groups.ContainsKey(groupName)))
@@ -239,17 +207,17 @@ namespace SignalRest
             }
             finally
             {
-                SessionManagementLock.ExitReadLock();
+                sessionManagementLock.ExitReadLock();
             }
         }
 
         internal static void GroupRemove(string hub, string connectionId, string groupName)
         {
-            SessionManagementLock.EnterReadLock();
+            sessionManagementLock.EnterReadLock();
             try
             {
                 Session session;
-                if (Sessions.TryGetValue(connectionId, out session))
+                if (sessions.TryGetValue(connectionId, out session))
                 {
                     ConcurrentDictionary<string, byte> groups;
                     if (session.Hubs.TryGetValue(hub, out groups))
@@ -261,73 +229,45 @@ namespace SignalRest
             }
             finally
             {
-                SessionManagementLock.ExitReadLock();
+                sessionManagementLock.ExitReadLock();
             }
         }
 
-        private async Task<Session> PerformConnect(string[] hubNames, string connectionId = null)
-        {
-            try
-            {
-                if (hubNames.Any(h => !Hubs.ContainsKey(h)))
-                    throw new ArgumentOutOfRangeException(nameof(hubNames));
-                if (connectionId == null)
-                    connectionId = Guid.NewGuid().ToString().ToLowerInvariant();
-                SessionManagementLock.EnterReadLock();
-                Session session;
-                try
-                {
-                    session = new Session(hubNames)
-                    {
-                        ConnectionId = connectionId,
-                        LastKeepAlive = DateTime.UtcNow,
-                        LastOwinDictionary = Request.GetOwinEnvironment()
-                    };
-                    Sessions.Add(connectionId, session);
-                }
-                finally
-                {
-                    SessionManagementLock.ExitReadLock();
-                }
-                var owinEnvironment = Request.GetOwinEnvironment();
-                foreach (var hubName in hubNames)
-                    using (var hub = Hub.GetHub(owinEnvironment, hubName, session))
-                        await hub.OnConnected();
-                return session;
-            }
-            catch
-            {
-                if (connectionId != null)
-                {
-                    SessionManagementLock.EnterReadLock();
-                    try
-                    {
-                        Sessions.Remove(connectionId);
-                    }
-                    finally
-                    {
-                        SessionManagementLock.ExitReadLock();
-                    }
-                }
-                throw;
-            }
-        }
-
-        private async Task<IHttpActionResult> GetConnectResponse(string[] hubNames, string connectionId = null)
-        {
-            try
-            {
-                return Ok((await PerformConnect(hubNames, connectionId)).ConnectionId);
-            }
-            catch (ArgumentOutOfRangeException)
-            {
-                return NotFound();
-            }
-        }
-
-        private static void OnSessionManagementException(SessionManagementExceptionEventArgs e)
+        static void OnSessionManagementException(SessionManagementExceptionEventArgs e)
         {
             SessionManagementException?.Invoke(null, e);
+        }
+
+        static void SessionManagerTick(object state)
+        {
+            sessionManagementLock.EnterWriteLock();
+            try
+            {
+                var now = DateTime.UtcNow;
+                var disconnectedConnectionIds = sessions.Where(kv => kv.Value.LastKeepAlive + GlobalHost.Configuration.DisconnectTimeout < now).Select(kv => kv.Key).ToArray();
+                foreach (var disconnectedConnectionId in disconnectedConnectionIds)
+                {
+                    var session = sessions[disconnectedConnectionId];
+                    sessions.Remove(disconnectedConnectionId);
+                    foreach (var hubDescriptor in session.Hubs)
+                    {
+                        try
+                        {
+                            using (var hub = Hub.GetHub(session.LastOwinDictionary, hubDescriptor.Key, session))
+                                hub.OnDisconnected(false).Wait();
+                        }
+                        catch (Exception ex)
+                        {
+                            OnSessionManagementException(new SessionManagementExceptionEventArgs(ex, disconnectedConnectionId, hubDescriptor.Key));
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                sessionManagementLock.ExitWriteLock();
+                sessionManager.Change(GlobalHost.Configuration.KeepAlive ?? TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(-1));
+            }
         }
 
         [HttpPost, Route("connect")]
@@ -348,10 +288,11 @@ namespace SignalRest
             {
                 return NotFound();
             }
+            
             return Ok(new
             {
                 ConnectionId = session.ConnectionId,
-                ReturnValue = await ExecuteHubMethodInvocation(session, Request.GetOwinEnvironment(), new HubMethodInvocation
+                ReturnValue = await ExecuteHubMethodInvocation(session, Request, new HubMethodInvocation
                 {
                     Arguments = hubNamesAndArguments.Arguments,
                     Hub = hubName,
@@ -375,8 +316,155 @@ namespace SignalRest
             return Ok(new
             {
                 ConnectionId = session.ConnectionId,
-                ReturnValues = await ExecuteMultipleHubMethodInvocations(hubNamesAndHubMethodInvocations.HubMethodInvocations, session, Request.GetOwinEnvironment())
+                ReturnValues = await ExecuteMultipleHubMethodInvocations(hubNamesAndHubMethodInvocations.HubMethodInvocations, session, Request)
             });
+        }
+
+        [HttpPost, Route("connections/{connectionId}/disconnect")]
+        public async Task<IHttpActionResult> Disconnect(string connectionId)
+        {
+            Session session;
+            sessionManagementLock.EnterReadLock();
+            try
+            {
+                if (!sessions.TryGetValue(connectionId, out session))
+                    return NotFound();
+                sessions.Remove(connectionId);
+            }
+            finally
+            {
+                sessionManagementLock.ExitReadLock();
+            }
+            foreach (var hubName in session.Hubs)
+                using (var hub = Hub.GetHub(Request, hubName.Key, session))
+                    await hub.OnDisconnected(true);
+            return Ok();
+        }
+
+        [HttpPost, Route("connections/{connectionId}/events")]
+        public IHttpActionResult Events(string connectionId)
+        {
+            sessionManagementLock.EnterReadLock();
+            try
+            {
+                Session session;
+                if (!sessions.TryGetValue(connectionId, out session))
+                    return NotFound();
+                return GetEventsResponse(session);
+            }
+            finally
+            {
+                sessionManagementLock.ExitReadLock();
+            }
+        }
+
+        async Task<IHttpActionResult> GetConnectResponse(string[] hubNames, string connectionId = null)
+        {
+            try
+            {
+                return Ok((await PerformConnect(hubNames, connectionId)).ConnectionId);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return NotFound();
+            }
+        }
+
+        IHttpActionResult GetEventsResponse(Session session)
+        {
+            session.LastKeepAlive = DateTime.UtcNow;
+            session.LastOwinDictionary = Request.GetOwinEnvironment();
+            return Ok(GetEvents(session));
+        }
+
+        [HttpPost, Route("connections/{connectionId}/invoke/{hubName}/{methodName}")]
+        public async Task<IHttpActionResult> Invoke(string connectionId, string hubName, string methodName, [FromBody] JArray arguments)
+        {
+            Session session;
+            sessionManagementLock.EnterReadLock();
+            try
+            {
+                if (!sessions.TryGetValue(connectionId, out session))
+                    return NotFound();
+            }
+            finally
+            {
+                sessionManagementLock.ExitReadLock();
+            }
+            session.LastKeepAlive = DateTime.UtcNow;
+            session.LastOwinDictionary = Request.GetOwinEnvironment();
+            return Ok(await ExecuteHubMethodInvocation(session, Request, new HubMethodInvocation
+            {
+                Arguments = arguments,
+                Hub = hubName,
+                Method = methodName,
+            }));
+        }
+
+        [HttpPost, Route("connections/{connectionId}/invoke")]
+        public async Task<IHttpActionResult> Invoke(string connectionId, [FromBody] HubMethodInvocation[] invocations)
+        {
+            Session session;
+            sessionManagementLock.EnterReadLock();
+            try
+            {
+                if (!sessions.TryGetValue(connectionId, out session))
+                    return NotFound();
+            }
+            finally
+            {
+                sessionManagementLock.ExitReadLock();
+            }
+            session.LastKeepAlive = DateTime.UtcNow;
+            session.LastOwinDictionary = Request.GetOwinEnvironment();
+            return Ok(await ExecuteMultipleHubMethodInvocations(invocations, session, Request));
+        }
+
+        async Task<Session> PerformConnect(string[] hubNames, string connectionId = null)
+        {
+            try
+            {
+                if (hubNames.Any(h => !Hubs.ContainsKey(h)))
+                    throw new ArgumentOutOfRangeException(nameof(hubNames));
+                if (connectionId == null)
+                    connectionId = Guid.NewGuid().ToString().ToLowerInvariant();
+                sessionManagementLock.EnterReadLock();
+                Session session;
+                try
+                {
+                    session = new Session(hubNames)
+                    {
+                        ConnectionId = connectionId,
+                        LastKeepAlive = DateTime.UtcNow,
+                        LastOwinDictionary = Request.GetOwinEnvironment()
+                    };
+                    sessions.Add(connectionId, session);
+                }
+                finally
+                {
+                    sessionManagementLock.ExitReadLock();
+                }
+                foreach (var hubName in hubNames)
+                    using (var hub = Hub.GetHub(Request, hubName, session))
+                        await hub.OnConnected();
+                return session;
+            }
+            catch
+            {
+                if (connectionId != null)
+                {
+                    sessionManagementLock.EnterReadLock();
+                    try
+                    {
+                        sessions.Remove(connectionId);
+                    }
+                    finally
+                    {
+                        sessionManagementLock.ExitReadLock();
+                    }
+                }
+                throw;
+            }
         }
 
         [HttpPost, Route("connections/{connectionId}/reconnect")]
@@ -384,14 +472,14 @@ namespace SignalRest
         {
             Session session;
             bool sessionRetrieved;
-            SessionManagementLock.EnterReadLock();
+            sessionManagementLock.EnterReadLock();
             try
             {
-                sessionRetrieved = Sessions.TryGetValue(connectionId, out session);
+                sessionRetrieved = sessions.TryGetValue(connectionId, out session);
             }
             finally
             {
-                SessionManagementLock.ExitReadLock();
+                sessionManagementLock.ExitReadLock();
             }
             if (!sessionRetrieved)
                 return await GetConnectResponse(hubNames, connectionId);
@@ -405,14 +493,14 @@ namespace SignalRest
         {
             Session session;
             bool sessionRetrieved;
-            SessionManagementLock.EnterReadLock();
+            sessionManagementLock.EnterReadLock();
             try
             {
-                sessionRetrieved = Sessions.TryGetValue(connectionId, out session);
+                sessionRetrieved = sessions.TryGetValue(connectionId, out session);
             }
             finally
             {
-                SessionManagementLock.ExitReadLock();
+                sessionManagementLock.ExitReadLock();
             }
             var hubMethodInvocation = new HubMethodInvocation
             {
@@ -433,7 +521,7 @@ namespace SignalRest
                 return Ok(new
                 {
                     ConnectionId = session.ConnectionId,
-                    ReturnValue = await ExecuteHubMethodInvocation(session, Request.GetOwinEnvironment(), hubMethodInvocation)
+                    ReturnValue = await ExecuteHubMethodInvocation(session, Request, hubMethodInvocation)
                 });
             }
             if (!session.Hubs.Keys.OrderBy(n => n).SequenceEqual(hubNamesAndArguments.HubNames.OrderBy(n => n), StringComparer.OrdinalIgnoreCase))
@@ -441,7 +529,7 @@ namespace SignalRest
             return Ok(new
             {
                 Events = GetEvents(session),
-                ReturnValue = await ExecuteHubMethodInvocation(session, Request.GetOwinEnvironment(), hubMethodInvocation)
+                ReturnValue = await ExecuteHubMethodInvocation(session, Request, hubMethodInvocation)
             });
         }
 
@@ -450,14 +538,14 @@ namespace SignalRest
         {
             Session session;
             bool sessionRetrieved;
-            SessionManagementLock.EnterReadLock();
+            sessionManagementLock.EnterReadLock();
             try
             {
-                sessionRetrieved = Sessions.TryGetValue(connectionId, out session);
+                sessionRetrieved = sessions.TryGetValue(connectionId, out session);
             }
             finally
             {
-                SessionManagementLock.ExitReadLock();
+                sessionManagementLock.ExitReadLock();
             }
             if (!sessionRetrieved)
             {
@@ -472,7 +560,7 @@ namespace SignalRest
                 return Ok(new
                 {
                     ConnectionId = session.ConnectionId,
-                    ReturnValues = await ExecuteMultipleHubMethodInvocations(hubNamesAndHubMethodInvocations.HubMethodInvocations, session, Request.GetOwinEnvironment())
+                    ReturnValues = await ExecuteMultipleHubMethodInvocations(hubNamesAndHubMethodInvocations.HubMethodInvocations, session, Request)
                 });
             }
             if (!session.Hubs.Keys.OrderBy(n => n).SequenceEqual(hubNamesAndHubMethodInvocations.HubNames.OrderBy(n => n), StringComparer.OrdinalIgnoreCase))
@@ -480,97 +568,8 @@ namespace SignalRest
             return Ok(new
             {
                 Events = GetEvents(session),
-                ReturnValues = await ExecuteMultipleHubMethodInvocations(hubNamesAndHubMethodInvocations.HubMethodInvocations, session, Request.GetOwinEnvironment())
+                ReturnValues = await ExecuteMultipleHubMethodInvocations(hubNamesAndHubMethodInvocations.HubMethodInvocations, session, Request)
             });
-        }
-
-        [HttpPost, Route("connections/{connectionId}/disconnect")]
-        public async Task<IHttpActionResult> Disconnect(string connectionId)
-        {
-            Session session;
-            SessionManagementLock.EnterReadLock();
-            try
-            {
-                if (!Sessions.TryGetValue(connectionId, out session))
-                    return NotFound();
-                Sessions.Remove(connectionId);
-            }
-            finally
-            {
-                SessionManagementLock.ExitReadLock();
-            }
-            var owinEnvironment = Request.GetOwinEnvironment();
-            foreach (var hubName in session.Hubs)
-                using (var hub = Hub.GetHub(owinEnvironment, hubName.Key, session))
-                    await hub.OnDisconnected(true);
-            return Ok();
-        }
-
-        private IHttpActionResult GetEventsResponse(Session session)
-        {
-            session.LastKeepAlive = DateTime.UtcNow;
-            session.LastOwinDictionary = Request.GetOwinEnvironment();
-            return Ok(GetEvents(session));
-        }
-
-        [HttpPost, Route("connections/{connectionId}/events")]
-        public IHttpActionResult Events(string connectionId)
-        {
-            SessionManagementLock.EnterReadLock();
-            try
-            {
-                Session session;
-                if (!Sessions.TryGetValue(connectionId, out session))
-                    return NotFound();
-                return GetEventsResponse(session);
-            }
-            finally
-            {
-                SessionManagementLock.ExitReadLock();
-            }
-        }
-
-        [HttpPost, Route("connections/{connectionId}/invoke/{hubName}/{methodName}")]
-        public async Task<IHttpActionResult> Invoke(string connectionId, string hubName, string methodName, [FromBody] JArray arguments)
-        {
-            Session session;
-            SessionManagementLock.EnterReadLock();
-            try
-            {
-                if (!Sessions.TryGetValue(connectionId, out session))
-                    return NotFound();
-            }
-            finally
-            {
-                SessionManagementLock.ExitReadLock();
-            }
-            session.LastKeepAlive = DateTime.UtcNow;
-            session.LastOwinDictionary = Request.GetOwinEnvironment();
-            return Ok(await ExecuteHubMethodInvocation(session, Request.GetOwinEnvironment(), new HubMethodInvocation
-            {
-                Arguments = arguments,
-                Hub = hubName,
-                Method = methodName,
-            }));
-        }
-
-        [HttpPost, Route("connections/{connectionId}/invoke")]
-        public async Task<IHttpActionResult> Invoke(string connectionId, [FromBody] HubMethodInvocation[] invocations)
-        {
-            Session session;
-            SessionManagementLock.EnterReadLock();
-            try
-            {
-                if (!Sessions.TryGetValue(connectionId, out session))
-                    return NotFound();
-            }
-            finally
-            {
-                SessionManagementLock.ExitReadLock();
-            }
-            session.LastKeepAlive = DateTime.UtcNow;
-            session.LastOwinDictionary = Request.GetOwinEnvironment();
-            return Ok(await ExecuteMultipleHubMethodInvocations(invocations, session, Request.GetOwinEnvironment()));
         }
     }
 }

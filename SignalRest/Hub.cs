@@ -3,6 +3,7 @@ using Microsoft.AspNet.SignalR.Hosting;
 using Microsoft.AspNet.SignalR.Hubs;
 using System;
 using System.Collections.Generic;
+using System.Net.Http;
 using System.Reflection;
 
 namespace SignalRest
@@ -21,12 +22,19 @@ namespace SignalRest
                 var hubType = reflectedHub.Type;
                 hubName = hubType.GetCustomAttribute<HubNameAttribute>()?.HubName ?? hubType.Name;
                 hub = (Hub)Activator.CreateInstance(hubType);
-                hub.SignalRestClients = new HubConnectionContext(hubName, session.ConnectionId);
-                hub.SignalRestContext = new HubCallerContext(new HostContext(environment).Request, session.ConnectionId);
-                hub.SignalRestEnvironment = environment;
-                hub.SignalRestGroups = new GroupManager(hubName);
-                hub.IsSignalRestInitialized = true;
+                hub.signalRestClients = new HubConnectionContext(hubName, session.ConnectionId);
+                hub.signalRestContext = new HubCallerContext(new HostContext(environment).Request, session.ConnectionId);
+                hub.signalRestEnvironment = environment;
+                hub.signalRestGroups = new GroupManager(hubName);
+                hub.isSignalRestInitialized = true;
             }
+            return hub;
+        }
+
+        internal static Hub GetHub(HttpRequestMessage requestMessage, string hubName, Session session)
+        {
+            var hub = GetHub(requestMessage.GetOwinEnvironment(), hubName, session);
+            hub.request = requestMessage;
             return hub;
         }
 
@@ -56,60 +64,69 @@ namespace SignalRest
             return new HubContext(hubType.GetCustomAttribute<HubNameAttribute>()?.HubName ?? hubType.Name);
         }
 
-        private static void InitializeWithoutCaller(Hub hub)
+        static void InitializeWithoutCaller(Hub hub)
         {
             var hubType = hub.GetType();
             var hubName = hubType.GetCustomAttribute<HubNameAttribute>()?.HubName ?? hubType.Name;
-            hub.SignalRestClients = new HubConnectionContext(hubName);
-            hub.SignalRestGroups = new GroupManager(hubName);
-            hub.IsSignalRestInitialized = true;
+            hub.signalRestClients = new HubConnectionContext(hubName);
+            hub.signalRestGroups = new GroupManager(hubName);
+            hub.isSignalRestInitialized = true;
         }
 
-        private IHubCallerConnectionContext<dynamic> SignalRestClients { get; set; }
-        private HubCallerContext SignalRestContext { get; set; }
-        private IDictionary<string, object> SignalRestEnvironment { get; set; }
-        private IGroupManager SignalRestGroups { get; set; }
-        private bool IsSignalRestInitialized { get; set; }
+        bool isSignalRestInitialized;
+        HttpRequestMessage request;
+        IHubCallerConnectionContext<dynamic> signalRestClients;
+        HubCallerContext signalRestContext;
+        IDictionary<string, object> signalRestEnvironment;
+        IGroupManager signalRestGroups;
 
-        public new IHubCallerConnectionContext<dynamic> Clients
+        void InitializeFromSignalRIfNecessary()
+        {
+            if (!isSignalRestInitialized)
+            {
+                var hubType = GetType();
+                var hubName = hubType.GetCustomAttribute<HubNameAttribute>()?.HubName ?? hubType.Name;
+                signalRestClients = new HubConnectionContext(hubName, base.Context.ConnectionId);
+                signalRestGroups = new GroupManager(hubName);
+                isSignalRestInitialized = true;
+            }
+        }
+
+        new public IHubCallerConnectionContext<dynamic> Clients
         {
             get
             {
                 InitializeFromSignalRIfNecessary();
-                return SignalRestClients;
+                return signalRestClients;
             }
         }
 
-        public new HubCallerContext Context
+        new public HubCallerContext Context
         {
-            get { return SignalRestContext ?? base.Context; }
+            get { return signalRestContext ?? base.Context; }
             set { base.Context = value; }
         }
 
         public IDictionary<string, object> Environment
         {
-            get { return SignalRestEnvironment ?? base.Context.Request.Environment; }
+            get { return signalRestEnvironment ?? base.Context.Request.Environment; }
         }
 
-        public new IGroupManager Groups
+        new public IGroupManager Groups
         {
             get
             {
                 InitializeFromSignalRIfNecessary();
-                return SignalRestGroups;
+                return signalRestGroups;
             }
         }
 
-        private void InitializeFromSignalRIfNecessary()
+        /// <summary>
+        /// Gets the current <see cref="HttpRequestMessage"/> if the request is being processed by SignalREST and Web API; otherwise, null.
+        /// </summary>
+        public HttpRequestMessage Request
         {
-            if (!IsSignalRestInitialized)
-            {
-                var hubType = GetType();
-                var hubName = hubType.GetCustomAttribute<HubNameAttribute>()?.HubName ?? hubType.Name;
-                SignalRestClients = new HubConnectionContext(hubName, base.Context.ConnectionId);
-                SignalRestGroups = new GroupManager(hubName);
-                IsSignalRestInitialized = true;
-            }
+            get { return request; }
         }
     }
 }
