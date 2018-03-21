@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.AspNet.SignalR.Hubs;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -17,30 +18,30 @@ namespace SignalRest
                 nameof(Hub.OnReconnected),
                 nameof(Hub.OnDisconnected)
             }, StringComparer.OrdinalIgnoreCase);
-            foreach (var methodInfo in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).Where(m => !bannedMethodNames.Contains(m.Name)))
+            foreach (var methodNameAndInfo in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).Select(m => Tuple.Create(m.GetCustomAttribute<HubMethodNameAttribute>()?.MethodName ?? m.Name, m)).Where(t => !bannedMethodNames.Contains(t.Item1)))
             {
                 Dictionary<int, Tuple<Type, Type[], FastMethodInfo>> methodOverloads;
-                if (!methodNames.TryGetValue(methodInfo.Name, out methodOverloads))
+                if (!methodNames.TryGetValue(methodNameAndInfo.Item1, out methodOverloads))
                 {
                     methodOverloads = new Dictionary<int, Tuple<Type, Type[], FastMethodInfo>>();
-                    methodNames.Add(methodInfo.Name, methodOverloads);
+                    methodNames.Add(methodNameAndInfo.Item1, methodOverloads);
                 }
-                var parameters = methodInfo.GetParameters();
+                var parameters = methodNameAndInfo.Item2.GetParameters();
                 var arity = parameters.Length;
                 if (methodOverloads.ContainsKey(arity))
                     throw new InvalidOperationException("Cannot have more than one method overload (case insensitive) with the same arity");
                 FastMethodInfo fastMethodInfo;
                 try
                 {
-                    fastMethodInfo = new FastMethodInfo(methodInfo);
+                    fastMethodInfo = new FastMethodInfo(methodNameAndInfo.Item2);
                 }
                 catch
                 {
                     if (methodOverloads.Count == 0)
-                        methodNames.Remove(methodInfo.Name);
+                        methodNames.Remove(methodNameAndInfo.Item1);
                     continue;
                 }
-                methodOverloads.Add(arity, Tuple.Create(methodInfo.ReturnType, parameters.Select(parameter => parameter.ParameterType).ToArray(), fastMethodInfo));
+                methodOverloads.Add(arity, Tuple.Create(methodNameAndInfo.Item2.ReturnType, parameters.Select(parameter => parameter.ParameterType).ToArray(), fastMethodInfo));
             }
             MethodNames = methodNames.ToDictionary(kv => kv.Key, kv => (IReadOnlyDictionary<int, Tuple<Type, Type[], FastMethodInfo>>)kv.Value, StringComparer.OrdinalIgnoreCase);
         }
