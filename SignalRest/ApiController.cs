@@ -238,34 +238,48 @@ namespace SignalRest
             SessionManagementException?.Invoke(null, e);
         }
 
-        static void SessionManagerTick(object state)
+        async static void SessionManagerTick(object state)
         {
-            sessionManagementLock.EnterWriteLock();
             try
             {
-                var now = DateTime.UtcNow;
-                var disconnectedConnectionIds = sessions.Where(kv => kv.Value.LastKeepAlive + GlobalHost.Configuration.DisconnectTimeout < now).Select(kv => kv.Key).ToArray();
-                foreach (var disconnectedConnectionId in disconnectedConnectionIds)
+                var disconnectedSessions = new Dictionary<string, Session>();
+                sessionManagementLock.EnterWriteLock();
+                try
                 {
-                    var session = sessions[disconnectedConnectionId];
-                    sessions.Remove(disconnectedConnectionId);
-                    foreach (var hubDescriptor in session.Hubs)
+                    var now = DateTime.UtcNow;
+                    foreach (var disconnectedConnectionId in sessions.Where(kv => kv.Value.LastKeepAlive + GlobalHost.Configuration.DisconnectTimeout < now).Select(kv => kv.Key).ToList())
                     {
-                        try
+                        Session session;
+                        if (sessions.TryGetValue(disconnectedConnectionId, out session))
                         {
-                            using (var hub = Hub.GetHub(session.LastOwinDictionary, hubDescriptor.Key, session))
-                                hub.OnDisconnected(false).Wait();
-                        }
-                        catch (Exception ex)
-                        {
-                            OnSessionManagementException(new SessionManagementExceptionEventArgs(ex, disconnectedConnectionId, hubDescriptor.Key));
+                            sessions.Remove(disconnectedConnectionId);
+                            disconnectedSessions.Add(disconnectedConnectionId, session);
                         }
                     }
                 }
+                finally
+                {
+                    sessionManagementLock.ExitWriteLock();
+                }
+                if (disconnectedSessions.Count > 0)
+                    await Task.WhenAll(disconnectedSessions.Select(ds => Task.Run(async () =>
+                    {
+                        foreach (var hubDescriptor in ds.Value.Hubs)
+                        {
+                            try
+                            {
+                                using (var hub = Hub.GetHub(ds.Value.LastOwinDictionary, hubDescriptor.Key, ds.Value))
+                                    await hub.OnDisconnected(false).ConfigureAwait(false);
+                            }
+                            catch (Exception ex)
+                            {
+                                OnSessionManagementException(new SessionManagementExceptionEventArgs(ex, ds.Key, hubDescriptor.Key));
+                            }
+                        }
+                    }))).ConfigureAwait(false);
             }
             finally
             {
-                sessionManagementLock.ExitWriteLock();
                 sessionManager.Change(GlobalHost.Configuration.KeepAlive ?? TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(-1));
             }
         }
